@@ -12,8 +12,8 @@ import (
 
 func newTestServer() *server {
 	return &server{
-		token:  "test-token",
-		convs:  map[string]*sync.Mutex{},
+		token: "test-token",
+		convs: map[string]*sync.Mutex{},
 	}
 }
 

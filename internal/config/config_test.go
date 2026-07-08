@@ -18,9 +18,9 @@ func TestInterval(t *testing.T) {
 		{"off", false, 0},
 		{"30m", true, 30 * time.Minute},
 		{"1h", true, time.Hour},
-		{"59s", false, 0},                // below the 1-minute floor
-		{"1m", true, time.Minute},        // exactly at the floor
-		{"not-a-duration", false, 0},     // unpar
+		{"59s", false, 0},            // below the 1-minute floor
+		{"1m", true, time.Minute},    // exactly at the floor
+		{"not-a-duration", false, 0}, // unpar
 	}
 	for _, tc := range tests {
 		got, ok := Interval(tc.in)
