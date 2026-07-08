@@ -21,6 +21,7 @@ const usage = `usage: zeroclaw <command>
   exec "<prompt>"       one turn in the main conversation
   give <file>           copy a host file into the agent's ~/incoming
   take <path> [dest]    copy a file out of the agent's home
+  beat                  fire a heartbeat turn now
   doctor                diagnose setup
   reset-env --force     destroy the environment and the agent's home
   daemon run|stop       run zeroclawd in the foreground / stop it`
@@ -72,6 +73,8 @@ func Run(args []string) error {
 			conversation = args[1]
 		}
 		return chat(conversation)
+	case "beat":
+		return daemon.Beat()
 	case "give":
 		if len(args) != 2 {
 			return errors.New("usage: zeroclaw give <file>")

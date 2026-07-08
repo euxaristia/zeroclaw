@@ -64,6 +64,10 @@ func RunServer() error {
 	if existing, ok := Running(); ok && existing.PID != os.Getpid() {
 		return fmt.Errorf("zeroclawd already running (pid %d)", existing.PID)
 	}
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
 	sessPath, err := config.Path("conversations.json")
 	if err != nil {
 		return err
@@ -93,11 +97,19 @@ func RunServer() error {
 	}
 	defer removeInfo()
 
+	schedCtx, cancelSched := context.WithCancel(context.Background())
+	defer cancelSched()
+	s.startScheduler(schedCtx, cfg)
+
 	shutdown := make(chan struct{})
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /status", s.handleStatus)
 	mux.HandleFunc("GET /conversations", s.handleConversations)
 	mux.HandleFunc("POST /turn", s.handleTurn)
+	mux.HandleFunc("POST /beat", func(w http.ResponseWriter, r *http.Request) {
+		go s.runScheduled(schedCtx, "heartbeat", heartbeatPrompt)
+		w.WriteHeader(http.StatusAccepted)
+	})
 	mux.HandleFunc("POST /shutdown", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		close(shutdown)

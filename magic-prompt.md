@@ -85,11 +85,13 @@ one. Zero's sandbox is excellent as the inner layer, insufficient as the outer o
   the agent's own home.
 - Zero's permission mode inside the container is full-auto/unsafe (the container is
   what protects the host; prompting has no user to answer it).
-- Investigation task, not assumption: whether zero's Linux helper (namespaces,
-  Landlock, seccomp) works inside Docker default seccomp/apparmor profiles, and
-  what `--security-opt` it needs. If nesting fails, document the degradation and
-  run tier 1 only. The re-entrancy guard (`ZERO_SANDBOXED` +
-  `ZERO_SANDBOX_BACKEND`) matters here; check `../zero/internal/sandbox/types.go`.
+- RESOLVED (2026-07-07): native nesting does not work under Docker's default
+  security profile. bubblewrap is in the image but unprivileged user namespaces
+  are blocked, so zero reports enforcement_level degraded. Decision: do not
+  weaken tier 1 (no CAP_SYS_ADMIN, no seccomp=unconfined) to enable tier 2
+  native wrapping. Zero still enforces its policy at the tool layer inside the
+  container (mode enforce, network deny for shell commands, write scoping);
+  that is the accepted tier 2 for the prototype.
 
 ### Tier 3 (fallback, no Docker present): zero sandbox on host
 

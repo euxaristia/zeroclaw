@@ -11,7 +11,9 @@ import (
 	"zeroclaw/internal/env"
 )
 
-const workspace = env.Home + "/workspace"
+// The agent's workspace root is its whole home: memory, skills, and projects
+// are all inside its world, and the container is the boundary around it.
+const workspace = env.Home
 
 // ZeroDriver runs turns through `zero exec` inside the zeroclaw container,
 // speaking stream-JSON schema v2 (see zero's docs/STREAM_JSON_PROTOCOL.md).

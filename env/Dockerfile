@@ -3,6 +3,7 @@ FROM debian:bookworm-slim
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       ca-certificates curl git ripgrep procps openssh-client unzip xz-utils \
+      bubblewrap \
  && rm -rf /var/lib/apt/lists/*
 
 RUN useradd --create-home --uid 1000 --shell /bin/bash zeroclaw

@@ -49,6 +49,26 @@ func Launch() error {
 	return fmt.Errorf("zeroclawd did not come up; see %s", logPath)
 }
 
+// Beat asks a running daemon to fire a heartbeat turn immediately.
+func Beat() error {
+	info, ok := Running()
+	if !ok {
+		return fmt.Errorf("zeroclawd is not running; run `zeroclaw up`")
+	}
+	req, err := http.NewRequest(http.MethodPost, info.url("/beat"), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+info.Token)
+	resp, err := (&http.Client{Timeout: 3 * time.Second}).Do(req)
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+	fmt.Println("heartbeat fired; watch ~/.zeroclaw/daemon.log")
+	return nil
+}
+
 // Stop asks a running daemon to shut down. Missing daemon is not an error.
 func Stop() error {
 	info, ok := Running()
