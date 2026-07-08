@@ -1,0 +1,103 @@
+package agent
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+
+	"zeroclaw/internal/env"
+)
+
+const workspace = env.Home + "/workspace"
+
+// ZeroDriver runs turns through `zero exec` inside the zeroclaw container,
+// speaking stream-JSON schema v2 (see zero's docs/STREAM_JSON_PROTOCOL.md).
+type ZeroDriver struct{}
+
+var _ Driver = ZeroDriver{}
+
+func (ZeroDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Event)) (TurnResult, error) {
+	args := []string{
+		"exec", "-i", env.Container, "zero", "exec",
+		"--input-format", "stream-json",
+		"--output-format", "stream-json",
+		"-C", workspace,
+	}
+	if opts.Autonomy != "" {
+		args = append(args, "--auto", opts.Autonomy)
+	}
+	if opts.SessionID != "" {
+		args = append(args, "--resume", opts.SessionID)
+	}
+	if opts.NewSessionID != "" {
+		args = append(args, "--init-session-id", opts.NewSessionID)
+	}
+
+	cmd := env.DockerCommandContext(ctx, args...)
+	cmd.Stderr = os.Stderr
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return TurnResult{}, err
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return TurnResult{}, err
+	}
+	if err := cmd.Start(); err != nil {
+		return TurnResult{}, fmt.Errorf("starting zero exec in container: %w", err)
+	}
+
+	input, err := json.Marshal(map[string]any{
+		"schemaVersion": 2,
+		"type":          "message",
+		"role":          "user",
+		"content":       opts.Prompt,
+	})
+	if err != nil {
+		return TurnResult{}, err
+	}
+	if _, err := stdin.Write(append(input, '\n')); err != nil {
+		return TurnResult{}, fmt.Errorf("writing input event: %w", err)
+	}
+	stdin.Close()
+
+	res := TurnResult{ExitCode: -1}
+	sc := bufio.NewScanner(stdout)
+	sc.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
+	for sc.Scan() {
+		line := bytes.TrimSpace(sc.Bytes())
+		if len(line) == 0 {
+			continue
+		}
+		var ev Event
+		if json.Unmarshal(line, &ev) != nil {
+			continue
+		}
+		if onEvent != nil {
+			onEvent(ev)
+		}
+		switch ev.Type {
+		case "run_start":
+			res.SessionID = ev.SessionID
+		case "final":
+			res.Final = ev.Text
+		case "run_end":
+			res.Status = ev.Status
+			res.ExitCode = ev.ExitCode
+		}
+	}
+	if err := sc.Err(); err != nil {
+		cmd.Wait()
+		return res, fmt.Errorf("reading zero events: %w", err)
+	}
+	if err := cmd.Wait(); err != nil && res.Status == "" {
+		return res, fmt.Errorf("zero exec failed before run_end: %w", err)
+	}
+	if res.Status == "" {
+		return res, fmt.Errorf("zero exec ended without a run_end event")
+	}
+	return res, nil
+}
