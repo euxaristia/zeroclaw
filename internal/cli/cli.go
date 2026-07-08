@@ -27,7 +27,7 @@ const usage = `usage: zeroclaw <command>
   beat                  fire a heartbeat turn now
   doctor                diagnose setup
   reset-env --force     destroy the environment and the agent's home
-  daemon run|stop       run zeroclawd in the foreground / stop it`
+  daemon start|run|stop start zeroclawd in the background / foreground / stop it`
 
 // Run dispatches a zeroclaw CLI invocation. Everything except up, doctor, and
 // the env file-copy commands is a thin RPC client of zeroclawd.
@@ -107,13 +107,16 @@ func Run(args []string) error {
 		}
 		return env.Reset()
 	case "daemon":
+		if len(args) > 1 && args[1] == "start" {
+			return daemon.Launch()
+		}
 		if len(args) > 1 && args[1] == "run" {
 			return daemon.RunServer()
 		}
 		if len(args) > 1 && args[1] == "stop" {
 			return daemon.Stop()
 		}
-		return errors.New("usage: zeroclaw daemon run|stop")
+		return errors.New("usage: zeroclaw daemon start|run|stop")
 	default:
 		return fmt.Errorf("unknown command %q\n%s", args[0], usage)
 	}
