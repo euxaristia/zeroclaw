@@ -16,12 +16,12 @@ import (
 
 // fakeBackend records the turns it receives and answers with a canned reply.
 type fakeBackend struct {
-	mu        sync.Mutex
-	turns     []string
-	allowed   map[string]bool
-	reply     string
-	turnErr   error
-	deleted   []string
+	mu      sync.Mutex
+	turns   []string
+	allowed map[string]bool
+	reply   string
+	turnErr error
+	deleted []string
 }
 
 func (f *fakeBackend) IsAllowedChat(chatID string) bool {

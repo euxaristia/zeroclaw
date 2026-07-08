@@ -41,10 +41,10 @@ type Trailer struct {
 }
 
 type server struct {
-	driver        agent.Driver
-	sessions      *agent.SessionStore
-	token         string
-	allowedChats  map[string]bool
+	driver       agent.Driver
+	sessions     *agent.SessionStore
+	token        string
+	allowedChats map[string]bool
 
 	mu    sync.Mutex
 	convs map[string]*sync.Mutex

@@ -37,11 +37,11 @@ const maxMessageUnits = 4096
 // dispatches allowed chats to the daemon, and sends replies. Callers pass a
 // Backend so the long-poll loop is testable without a real bot token.
 type Channel struct {
-	token    string
-	allowed  map[string]bool
-	backend  Backend
-	baseURL  string
-	client   *http.Client
+	token   string
+	allowed map[string]bool
+	backend Backend
+	baseURL string
+	client  *http.Client
 }
 
 // Backend is the small surface the channel needs from the daemon. It is an
@@ -167,7 +167,7 @@ func (c *Channel) handleUpdate(ctx context.Context, up update) {
 
 	switch {
 	case text == "/new":
-		c.backend.DeleteConversation("telegram-"+chatID)
+		c.backend.DeleteConversation("telegram-" + chatID)
 		c.send(ctx, chatID, "Conversation reset. Starting fresh.")
 		return
 	case text == "/ping":

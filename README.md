@@ -65,6 +65,22 @@ go build -o zeroclaw.exe ./cmd/zeroclaw   # zeroclaw on unix
 seeds the agent's home with its identity, memory index, and heartbeat files
 (`env/bootstrap/`).
 
+## Development 🛠️
+
+Run these four checks before every commit. CI gates on them (see
+`.github/workflows/ci.yml`): `gofmt -l .` must report nothing, `go vet ./...`
+and `go test ./...` must pass, and `golangci-lint` is an advisory gate.
+
+```
+go fmt ./...      # must report no changes (rewrites files in place)
+go vet ./...      # must pass
+go test ./...     # must pass
+go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2 run --enable-only unused,ineffassign,staticcheck ./...
+```
+
+`go fmt` rewrites files, so run it, review the diff, then commit. The linter
+pinned version must match CI (currently v2.12.2).
+
 ## Commands ⌨️
 
 ```
