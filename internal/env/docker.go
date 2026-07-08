@@ -24,7 +24,9 @@ const (
 )
 
 func docker(args ...string) (string, error) {
-	out, err := exec.Command("docker", args...).CombinedOutput()
+	cmd := exec.Command("docker", args...)
+	hideConsole(cmd)
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("docker %s: %w\n%s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
 	}
@@ -33,6 +35,7 @@ func docker(args ...string) (string, error) {
 
 func dockerOK(args ...string) bool {
 	cmd := exec.Command("docker", args...)
+	hideConsole(cmd)
 	cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
 	return cmd.Run() == nil
 }
@@ -41,7 +44,9 @@ func dockerOK(args ...string) bool {
 // stream stdio themselves (the agent driver). It keeps "how we reach the
 // environment" in one package.
 func DockerCommandContext(ctx context.Context, args ...string) *exec.Cmd {
-	return exec.CommandContext(ctx, "docker", args...)
+	cmd := exec.CommandContext(ctx, "docker", args...)
+	hideConsole(cmd)
+	return cmd
 }
 
 func EngineReady() error {
@@ -94,6 +99,7 @@ func Up() error {
 	if !dockerOK("image", "inspect", Image) {
 		fmt.Println("building image", Image)
 		build := exec.Command("docker", "build", "-t", Image, dir)
+		hideConsole(build)
 		build.Stdout, build.Stderr = os.Stdout, os.Stderr
 		if err := build.Run(); err != nil {
 			return fmt.Errorf("image build failed: %w", err)
