@@ -94,6 +94,7 @@ func newTestChannel(baseURL string, fb Backend) *Channel {
 		allowed: map[string]bool{"123": true},
 		backend: fb,
 		baseURL: baseURL,
+		client:  &http.Client{Timeout: 5 * time.Second},
 	}
 }
 
@@ -222,6 +223,18 @@ func TestChannelReportsTurnError(t *testing.T) {
 	}
 }
 
+func utf16Units(s string) int {
+	n := 0
+	for _, r := range s {
+		if r > 0xFFFF {
+			n += 2
+		} else {
+			n++
+		}
+	}
+	return n
+}
+
 func TestChunkMessage(t *testing.T) {
 	// A single long run of ASCII stays under the limit in one chunk.
 	short := strings.Repeat("a", 10)
@@ -229,21 +242,46 @@ func TestChunkMessage(t *testing.T) {
 		t.Fatalf("short message should be one chunk, got %d", len(got))
 	}
 
-	// Exactly maxMessageBytes runes is one chunk; one more splits.
-	exact := strings.Repeat("b", maxMessageBytes)
+	// Exactly maxMessageUnits runes is one chunk; one more splits.
+	exact := strings.Repeat("b", maxMessageUnits)
 	if got := chunkMessage(exact); len(got) != 1 {
 		t.Fatalf("exact-size message should be one chunk, got %d", len(got))
 	}
-	oneMore := strings.Repeat("b", maxMessageBytes+1)
+	oneMore := strings.Repeat("b", maxMessageUnits+1)
 	if got := chunkMessage(oneMore); len(got) != 2 {
 		t.Fatalf("message over limit should split to 2, got %d", len(got))
 	}
 
-	// Multi-byte rune (emoji) must never split mid-character.
-	emoji := strings.Repeat("😀", maxMessageBytes/2+5)
-	for _, c := range chunkMessage(emoji) {
-		if len([]rune(c)) > maxMessageBytes {
-			t.Fatalf("chunk split a multibyte rune: len %d", len([]rune(c)))
+	// Multi-byte rune (emoji) must never split mid-character, and no chunk may
+	// exceed Telegram's 4096 UTF-16 unit limit.
+	emoji := strings.Repeat("😀", maxMessageUnits/2+5)
+	chunks := chunkMessage(emoji)
+	if len(chunks) == 0 {
+		t.Fatal("emoji message produced no chunks")
+	}
+	for _, c := range chunks {
+		if utf16Units(c) > maxMessageUnits {
+			t.Fatalf("chunk exceeds UTF-16 limit: %d units", utf16Units(c))
 		}
+	}
+
+	// Emoji-heavy input where each rune is 2 units must split well before the
+	// rune count reaches 4096. A single chunk of 4096 emoji would be 8192 units.
+	heavy := strings.Repeat("😀", maxMessageUnits)
+	if got := chunkMessage(heavy); len(got) != 2 {
+		t.Fatalf("4096 emoji (8192 units) should split to 2, got %d", len(got))
+	}
+
+	// A reply ending in "\n" must not yield a trailing empty chunk (MEDIUM #1).
+	trailing := "line one\nline two\n"
+	for _, c := range chunkMessage(trailing) {
+		if c == "" {
+			t.Fatalf("trailing newline produced an empty chunk: %v", chunkMessage(trailing))
+		}
+	}
+
+	// Empty input yields no chunks, so callers never POST empty text.
+	if got := chunkMessage(""); got != nil {
+		t.Fatalf("empty input should yield nil, got %v", got)
 	}
 }

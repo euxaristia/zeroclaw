@@ -27,10 +27,11 @@ const telegramAPIBase = "https://api.telegram.org/bot"
 // connection open until an update arrives or this elapses.
 const defaultPollTimeout = 30 * time.Second
 
-// maxMessageBytes is Telegram's hard caption/message limit. We chunk the
-// agent's final reply at the Unicode rune level so multi-byte text never
-// splits a character.
-const maxMessageBytes = 4096
+// maxMessageUnits is Telegram's hard caption/message limit: 4096 UTF-16 code
+// units (https://core.telegram.org/bots/api#sendmessage). We chunk the agent's
+// reply at the rune level but budget by UTF-16 units, because astral-plane
+// runes (emoji, CJK Ext-B+) count as two units each.
+const maxMessageUnits = 4096
 
 // Channel drives one Telegram bot for its lifetime: it long-polls getUpdates,
 // dispatches allowed chats to the daemon, and sends replies. Callers pass a
@@ -40,6 +41,7 @@ type Channel struct {
 	allowed  map[string]bool
 	backend  Backend
 	baseURL  string
+	client   *http.Client
 }
 
 // Backend is the small surface the channel needs from the daemon. It is an
@@ -61,6 +63,7 @@ func NewChannel(tg config.Telegram, srv Backend) *Channel {
 		allowed: allowed,
 		backend: srv,
 		baseURL: telegramAPIBase + tg.Token,
+		client:  &http.Client{},
 	}
 }
 
@@ -77,7 +80,6 @@ func StartTelegram(ctx context.Context, tg config.Telegram, srv Backend) {
 func (c *Channel) Run(ctx context.Context) {
 	log.Printf("telegram: channel started (allowed chats: %d)", len(c.allowed))
 	offset := 0
-	client := &http.Client{}
 	for {
 		select {
 		case <-ctx.Done():
@@ -86,7 +88,7 @@ func (c *Channel) Run(ctx context.Context) {
 		default:
 		}
 
-		updates, err := c.getUpdates(ctx, client, offset)
+		updates, err := c.getUpdates(ctx, offset)
 		if err != nil {
 			if ctx.Err() != nil {
 				return
@@ -123,13 +125,13 @@ type getUpdatesResponse struct {
 	Result []update `json:"result"`
 }
 
-func (c *Channel) getUpdates(ctx context.Context, client *http.Client, offset int) ([]update, error) {
+func (c *Channel) getUpdates(ctx context.Context, offset int) ([]update, error) {
 	url := fmt.Sprintf("%s/getUpdates?offset=%d&timeout=%d", c.baseURL, offset, int(defaultPollTimeout.Seconds()))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := client.Do(req)
+	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +218,7 @@ func (c *Channel) sendOne(ctx context.Context, chatID, text string) error {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := c.client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -238,19 +240,34 @@ func (c *Channel) sendOne(ctx context.Context, chatID, text string) error {
 	return nil
 }
 
-// chunkMessage splits text into Telegram-sized pieces at rune boundaries.
+// chunkMessage splits text into Telegram-sized pieces. It preserves newlines
+// (splitting after each "\n") and never splits a rune, but budgets by UTF-16
+// code units (Telegram's actual limit, maxMessageUnits) rather than rune count,
+// so astral-plane runes (2 units each) cannot push a chunk over the wire limit.
 func chunkMessage(text string) []string {
 	if text == "" {
-		return []string{""}
+		return nil
 	}
 	var out []string
 	for _, part := range strings.SplitAfter(text, "\n") {
 		runes := []rune(part)
-		for len(runes) > maxMessageBytes {
-			out = append(out, string(runes[:maxMessageBytes]))
-			runes = runes[maxMessageBytes:]
+		if len(runes) == 0 {
+			continue // Skip the trailing "" that SplitAfter yields on "\n".
 		}
-		out = append(out, string(runes))
+		start, used := 0, 0
+		for i, r := range runes {
+			sz := 1
+			if r > 0xFFFF {
+				sz = 2
+			}
+			if used+sz > maxMessageUnits {
+				out = append(out, string(runes[start:i]))
+				start, used = i, sz
+			} else {
+				used += sz
+			}
+		}
+		out = append(out, string(runes[start:]))
 	}
 	return out
 }
