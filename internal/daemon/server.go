@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"zeroclaw/internal/agent"
+	"zeroclaw/internal/channels"
 	"zeroclaw/internal/config"
 )
 
@@ -40,9 +41,10 @@ type Trailer struct {
 }
 
 type server struct {
-	driver   agent.Driver
-	sessions *agent.SessionStore
-	token    string
+	driver        agent.Driver
+	sessions      *agent.SessionStore
+	token         string
+	allowedChats  map[string]bool
 
 	mu    sync.Mutex
 	convs map[string]*sync.Mutex
@@ -80,11 +82,16 @@ func RunServer() error {
 	if _, err := rand.Read(tokenBytes); err != nil {
 		return err
 	}
+	allowed := map[string]bool{}
+	for _, id := range cfg.Telegram.AllowedChats {
+		allowed[id] = true
+	}
 	s := &server{
-		driver:   agent.ZeroDriver{},
-		sessions: sessions,
-		token:    hex.EncodeToString(tokenBytes),
-		convs:    map[string]*sync.Mutex{},
+		driver:       agent.ZeroDriver{},
+		sessions:     sessions,
+		token:        hex.EncodeToString(tokenBytes),
+		allowedChats: allowed,
+		convs:        map[string]*sync.Mutex{},
 	}
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -100,6 +107,18 @@ func RunServer() error {
 	schedCtx, cancelSched := context.WithCancel(context.Background())
 	defer cancelSched()
 	s.startScheduler(schedCtx, cfg)
+
+	// Telegram channel (M3): long polling against the Bot API, single-owner
+	// allowlist by chat id. Disabled when no token is configured.
+	tgCtx, cancelTg := context.WithCancel(context.Background())
+	defer cancelTg()
+	if tg, ok, err := config.LoadTelegram(); ok {
+		go channels.StartTelegram(tgCtx, tg, s)
+	} else if err != nil {
+		log.Printf("telegram: config error, channel disabled: %v", err)
+	} else {
+		log.Printf("telegram: no token configured, channel disabled")
+	}
 
 	shutdown := make(chan struct{})
 	mux := http.NewServeMux()
@@ -132,6 +151,45 @@ func RunServer() error {
 		}
 		return err
 	}
+}
+
+// IsAllowedChat reports whether the chat id may drive the agent. The allowlist
+// is the single-owner gate: an unknown or empty id is always rejected.
+func (s *server) IsAllowedChat(id string) bool {
+	return id != "" && s.allowedChats[id]
+}
+
+// Turn runs one conversation turn through the driver, persisting the resulting
+// session. Shared by the /turn endpoint and the Telegram channel so both paths
+// honour the same conversation lock and session bookkeeping.
+func (s *server) Turn(ctx context.Context, conversation, prompt, autonomy string) (agent.TurnResult, error) {
+	if conversation == "" {
+		conversation = "main"
+	}
+	if autonomy == "" {
+		autonomy = "high"
+	}
+	lock := s.convLock(conversation)
+	lock.Lock()
+	defer lock.Unlock()
+
+	opts := agent.TurnOptions{
+		SessionID: s.sessions.Get(conversation),
+		Prompt:    prompt,
+		Autonomy:  autonomy,
+	}
+	res, err := s.driver.Turn(ctx, opts, nil)
+	if res.SessionID != "" && opts.SessionID == "" {
+		if serr := s.sessions.Set(conversation, res.SessionID); serr != nil && err == nil {
+			err = fmt.Errorf("conversation not persisted: %w", serr)
+		}
+	}
+	return res, err
+}
+
+// DeleteConversation resets a conversation's session mapping.
+func (s *server) DeleteConversation(conversation string) error {
+	return s.sessions.Delete(conversation)
 }
 
 func (s *server) auth(next http.Handler) http.Handler {

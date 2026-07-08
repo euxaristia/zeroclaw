@@ -22,6 +22,17 @@ type Config struct {
 	// heartbeat.
 	HeartbeatEvery string     `json:"heartbeatEvery"`
 	Schedules      []Schedule `json:"schedules"`
+	// Telegram is the M3 chat channel. Empty token disables the channel.
+	Telegram Telegram `json:"telegram"`
+}
+
+type Telegram struct {
+	// Token is the Bot API token from @BotFather. Empty disables the channel.
+	Token string `json:"token"`
+	// AllowedChats is the single-owner allowlist. Each entry is a chat id
+	// (numeric string) permitted to drive the agent. Empty means no one is
+	// allowed, so a misconfigured token cannot receive commands.
+	AllowedChats []string `json:"allowedChats"`
 }
 
 var defaultConfig = Config{HeartbeatEvery: "30m"}
@@ -52,6 +63,19 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("parsing %s: %w", p, err)
 	}
 	return cfg, nil
+}
+
+// LoadTelegram reads the Telegram channel config, returning ok=false when the
+// channel is disabled (no token) so callers skip startup cleanly.
+func LoadTelegram() (Telegram, bool, error) {
+	cfg, err := Load()
+	if err != nil {
+		return Telegram{}, false, err
+	}
+	if cfg.Telegram.Token == "" {
+		return Telegram{}, false, nil
+	}
+	return cfg.Telegram, true, nil
 }
 
 // Interval parses a schedule duration, returning ok=false for disabled or

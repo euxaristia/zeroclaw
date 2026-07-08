@@ -115,6 +115,7 @@ magic-prompt.md    the full design plan
 
 ## Status 🗺️
 
-M0 (walking skeleton), M1 (daemon and client split), and M2 (scheduler,
-heartbeat, memory loop) are done. Next: Telegram channel, then hardening
-(fallback tier, egress allowlist, autostart). Details in `magic-prompt.md`.
+M0 (walking skeleton), M1 (daemon and client split), M2 (scheduler,
+heartbeat, memory loop), and M3 (Telegram channel via long polling with a
+single-owner chat allowlist) are done. Next: hardening (fallback tier, egress
+allowlist, autostart). Details in `magic-prompt.md`.

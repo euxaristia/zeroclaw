@@ -48,6 +48,22 @@ func (s *SessionStore) Set(conversation, sessionID string) error {
 	return os.WriteFile(s.path, data, 0o600)
 }
 
+// Delete drops a conversation's session mapping. The next turn starts a fresh
+// backend session under the same conversation name.
+func (s *SessionStore) Delete(conversation string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.m[conversation]; !ok {
+		return nil
+	}
+	delete(s.m, conversation)
+	data, err := json.MarshalIndent(s.m, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(s.path, data, 0o600)
+}
+
 func (s *SessionStore) All() map[string]string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
