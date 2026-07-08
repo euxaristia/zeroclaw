@@ -68,6 +68,24 @@ func TestRunDaemonArgCount(t *testing.T) {
 	}
 }
 
+func TestRunHelp(t *testing.T) {
+	if err := Run([]string{"help"}); err != nil {
+		t.Errorf("Run([help]) returned error %v, want nil", err)
+	}
+	if err := Run([]string{"--help"}); err != nil {
+		t.Errorf("Run([--help]) returned error %v, want nil", err)
+	}
+}
+
+func TestRunVersion(t *testing.T) {
+	if err := Run([]string{"version"}); err != nil {
+		t.Errorf("Run([version]) returned error %v, want nil", err)
+	}
+	if err := Run([]string{"--version"}); err != nil {
+		t.Errorf("Run([--version]) returned error %v, want nil", err)
+	}
+}
+
 func contains(haystack, needle string) bool {
 	for i := 0; i+len(needle) <= len(haystack); i++ {
 		if haystack[i:i+len(needle)] == needle {

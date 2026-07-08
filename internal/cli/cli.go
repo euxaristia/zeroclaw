@@ -12,6 +12,9 @@ import (
 	"zeroclaw/internal/env"
 )
 
+// version is the released zeroclaw version. Bump on each release.
+const version = "0.1.0"
+
 const usage = `usage: zeroclaw <command>
 
   up                    start environment + zeroclawd
@@ -33,6 +36,12 @@ func Run(args []string) error {
 		return errors.New(usage)
 	}
 	switch args[0] {
+	case "help", "--help":
+		fmt.Println(usage)
+		return nil
+	case "version", "--version":
+		fmt.Println("zeroclaw", version)
+		return nil
 	case "up":
 		if err := env.Up(); err != nil {
 			return err
