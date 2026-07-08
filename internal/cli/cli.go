@@ -122,21 +122,36 @@ func Run(args []string) error {
 	}
 }
 
-func renderEvent(ev agent.Event) {
+// renderer prints one turn's driver events. It tracks whether the dimmed
+// reasoning stream is mid-line so the next non-reasoning event starts fresh.
+type renderer struct{ midReasoning bool }
+
+func (r *renderer) event(ev agent.Event) {
+	if r.midReasoning && ev.Type != "reasoning" {
+		r.midReasoning = false
+		fmt.Fprintln(os.Stderr)
+	}
 	switch ev.Type {
 	case "run_start":
 		fmt.Fprintf(os.Stderr, "[session %s | %s %s]\n", ev.SessionID, ev.Provider, ev.Model)
+	case "reasoning":
+		r.midReasoning = true
+		fmt.Fprintf(os.Stderr, "\x1b[2m%s\x1b[0m", ev.Delta)
 	case "text":
 		fmt.Print(ev.Delta)
 	case "tool_call":
 		fmt.Fprintf(os.Stderr, "[tool %s]\n", ev.Name)
+	case "tool_result":
+		if ev.Display.Summary != "" {
+			fmt.Fprintf(os.Stderr, "[%s]\n", ev.Display.Summary)
+		}
 	case "error":
 		fmt.Fprintf(os.Stderr, "[error %s: %s]\n", ev.Code, ev.Message)
 	}
 }
 
 func execTurn(conversation, prompt string) error {
-	trailer, err := turnStream(conversation, prompt, renderEvent)
+	trailer, err := turnStream(conversation, prompt, (&renderer{}).event)
 	if err != nil {
 		return err
 	}
@@ -165,7 +180,7 @@ func chat(conversation string) error {
 			return nil
 		}
 		fmt.Print("zeroclaw> ")
-		if _, err := turnStream(conversation, line, renderEvent); err != nil {
+		if _, err := turnStream(conversation, line, (&renderer{}).event); err != nil {
 			fmt.Fprintln(os.Stderr, "error:", err)
 			continue
 		}

@@ -22,6 +22,10 @@ type Event struct {
 	Message       string `json:"message"`
 	Provider      string `json:"provider"`
 	Model         string `json:"model"`
+	Display       struct {
+		Kind    string `json:"kind"`
+		Summary string `json:"summary"`
+	} `json:"display"`
 }
 
 type TurnOptions struct {
