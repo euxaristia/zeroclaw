@@ -41,6 +41,10 @@ RUN chmod 0755 /usr/local/bin/zero
 
 COPY bootstrap/ /opt/zeroclaw/bootstrap/
 
+# MIT notice for the bundled zero binary; required if this image is ever
+# distributed (pushed to a registry, exported), inert for local-only builds.
+COPY LICENSE.zero /opt/zeroclaw/LICENSE.zero
+
 USER zeroclaw
 WORKDIR /home/zeroclaw
 
