@@ -170,7 +170,7 @@ host                                    container (zeroclaw-env)
 
 ## Stack
 
-- Go 1.25+ for everything: one module, one binary. `zeroclaw` is the CLI;
+- Go 1.26+ for everything: one module, one binary. `zeroclaw` is the CLI;
   `zeroclawd` is the same binary relaunched with a `daemon run` subcommand, the
   way zero's internal/daemon launcher works. os/exec drives docker. Nothing
   imports zero's code; it stays an untouched sibling project consumed as a
