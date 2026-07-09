@@ -6,9 +6,35 @@ FROM debian:trixie-slim
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       ca-certificates curl git ripgrep procps openssh-client unzip xz-utils \
+      python3 jq gcc libc6-dev \
  && rm -rf /var/lib/apt/lists/*
 
+# gh from the latest GitHub release; the Debian repo version lags too far behind.
+RUN arch="$(dpkg --print-architecture)" \
+ && ver="$(curl -fsSL https://api.github.com/repos/cli/cli/releases/latest | jq -r '.tag_name | ltrimstr("v")')" \
+ && curl -fsSL "https://github.com/cli/cli/releases/download/v${ver}/gh_${ver}_linux_${arch}.tar.gz" \
+    | tar -xz -C /usr/local/bin --strip-components=2 "gh_${ver}_linux_${arch}/bin/gh" \
+ && gh --version
+
 RUN useradd --create-home --uid 1000 --shell /bin/bash zeroclaw
+
+# Latest Go from go.dev; the Debian package stays pinned to whatever shipped
+# with trixie.
+RUN arch="$(dpkg --print-architecture)" \
+ && ver="$(curl -fsSL 'https://go.dev/VERSION?m=text' | head -n1)" \
+ && curl -fsSL "https://go.dev/dl/${ver}.linux-${arch}.tar.gz" | tar -xz -C /usr/local \
+ && /usr/local/go/bin/go version
+
+# rustup lives outside /home/zeroclaw because the home volume mount would
+# shadow anything baked in there. Owned by the agent so `rustup update` and
+# `rustup component add` work at runtime.
+ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo
+RUN curl -fsSL https://sh.rustup.rs \
+    | sh -s -- -y --no-modify-path --profile minimal --default-toolchain stable \
+ && chown -R zeroclaw:zeroclaw "$RUSTUP_HOME" "$CARGO_HOME" \
+ && "$CARGO_HOME/bin/cargo" --version
+
+ENV PATH=/usr/local/go/bin:/usr/local/cargo/bin:$PATH
 
 COPY bin/zero /usr/local/bin/zero
 RUN chmod 0755 /usr/local/bin/zero
