@@ -2,6 +2,14 @@
   <img src="docs/banner.jpeg" alt="zeroclaw" width="560">
 </p>
 
+<p align="center">
+  <a href="go.mod"><img alt="Go" src="https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white"></a>
+  <a href="https://github.com/euxaristia/zeroclaw/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/euxaristia/zeroclaw/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-yellow"></a>
+  <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-555">
+  <a href="https://github.com/Gitlawb/zero"><img alt="Powered by zero" src="https://img.shields.io/badge/powered%20by-zero-d62828"></a>
+</p>
+
 # zeroclaw 🦞
 
 An autonomous personal agent that lives in its own isolated Linux environment.
