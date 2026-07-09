@@ -41,6 +41,12 @@ RUN chmod 0755 /usr/local/bin/zero
 
 COPY bootstrap/ /opt/zeroclaw/bootstrap/
 
+# The agent's soul: identity, values, voice. Lives OUTSIDE the agent's home on
+# purpose: the agent owns /home/zeroclaw and could delete-and-recreate any file
+# there, while /opt/zeroclaw is root-owned, so this stays operator-curated and
+# read-only to the agent. Changing it means editing env/SOUL.md and rebuilding.
+COPY SOUL.md /opt/zeroclaw/SOUL.md
+
 # MIT notice for the bundled zero binary; required if this image is ever
 # distributed (pushed to a registry, exported), inert for local-only builds.
 COPY LICENSE.zero /opt/zeroclaw/LICENSE.zero

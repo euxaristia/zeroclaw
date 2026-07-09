@@ -202,6 +202,10 @@ zeroclaw/
   env/
     Dockerfile
     LICENSE.zero         MIT notice for the bundled zero binary
+    SOUL.md              operator-curated identity/values; baked into the image
+                         at /opt/zeroclaw/SOUL.md (root-owned, outside the
+                         agent-writable home) so the agent can read but never
+                         edit it
     bootstrap/           ZEROCLAW.md, MEMORY.md, HEARTBEAT.md seeds
 ```
 
