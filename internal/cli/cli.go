@@ -122,9 +122,16 @@ func Run(args []string) error {
 	}
 }
 
-// renderer prints one turn's driver events. It tracks whether the dimmed
-// reasoning stream is mid-line so the next non-reasoning event starts fresh.
-type renderer struct{ midReasoning bool }
+// renderer prints one turn's driver events in zero's visual language: muted
+// reasoning, accent-marked tool heads with faint result summaries, plain ink
+// for the reply. It tracks the previous event so blocks of different kinds
+// get a separating blank line and a mid-line reasoning stream is terminated
+// before anything else prints. Text deltas stay on stdout, decorations on
+// stderr, as before.
+type renderer struct {
+	midReasoning bool
+	last         string
+}
 
 func (r *renderer) event(ev agent.Event) {
 	if r.midReasoning && ev.Type != "reasoning" {
@@ -133,21 +140,31 @@ func (r *renderer) event(ev agent.Event) {
 	}
 	switch ev.Type {
 	case "run_start":
-		fmt.Fprintf(os.Stderr, "[session %s | %s %s]\n", ev.SessionID, ev.Provider, ev.Model)
+		fmt.Fprintf(os.Stderr, "%s\n\n", faint(fmt.Sprintf("session %s · %s %s", ev.SessionID, ev.Provider, ev.Model)))
 	case "reasoning":
 		r.midReasoning = true
-		fmt.Fprintf(os.Stderr, "\x1b[2m%s\x1b[0m", ev.Delta)
+		fmt.Fprint(os.Stderr, muted(ev.Delta))
 	case "text":
+		if r.last == "tool_call" || r.last == "tool_result" {
+			fmt.Fprintln(os.Stderr)
+		}
 		fmt.Print(ev.Delta)
 	case "tool_call":
-		fmt.Fprintf(os.Stderr, "[tool %s]\n", ev.Name)
+		if r.last == "text" {
+			fmt.Println()
+		}
+		fmt.Fprintf(os.Stderr, "%s %s\n", accent("⏺"), boldInk(ev.Name))
 	case "tool_result":
 		if ev.Display.Summary != "" {
-			fmt.Fprintf(os.Stderr, "[%s]\n", ev.Display.Summary)
+			fmt.Fprintf(os.Stderr, "  %s\n", faint(ev.Display.Summary))
 		}
 	case "error":
-		fmt.Fprintf(os.Stderr, "[error %s: %s]\n", ev.Code, ev.Message)
+		if r.last == "text" {
+			fmt.Println()
+		}
+		fmt.Fprintf(os.Stderr, "%s %s\n", red("✗"), red(ev.Code+": "+ev.Message))
 	}
+	r.last = ev.Type
 }
 
 func execTurn(conversation, prompt string) error {
@@ -156,7 +173,11 @@ func execTurn(conversation, prompt string) error {
 		return err
 	}
 	fmt.Println()
-	fmt.Fprintf(os.Stderr, "[done status=%s session=%s]\n", trailer.Status, trailer.SessionID)
+	mark := green("✓ " + trailer.Status)
+	if trailer.Error != "" {
+		mark = red("✗ " + trailer.Status + " " + trailer.Error)
+	}
+	fmt.Fprintf(os.Stderr, "%s %s\n", mark, faint("session "+trailer.SessionID))
 	return nil
 }
 
@@ -164,10 +185,11 @@ func chat(conversation string) error {
 	if _, ok := daemon.Running(); !ok {
 		return errors.New("zeroclawd is not running; run `zeroclaw up`")
 	}
-	fmt.Printf("chatting with zeroclaw (conversation %q; /quit to exit)\n", conversation)
+	fmt.Println(badge(" zeroclaw ") + " " + faint("conversation "+conversation+" · /quit to exit"))
 	in := bufio.NewScanner(os.Stdin)
 	for {
-		fmt.Print("you> ")
+		fmt.Println()
+		fmt.Print(accent("❯ "))
 		if !in.Scan() {
 			fmt.Println()
 			return in.Err()
@@ -179,9 +201,9 @@ func chat(conversation string) error {
 		if line == "/quit" || line == "/exit" {
 			return nil
 		}
-		fmt.Print("zeroclaw> ")
+		fmt.Println()
 		if _, err := turnStream(conversation, line, (&renderer{}).event); err != nil {
-			fmt.Fprintln(os.Stderr, "error:", err)
+			fmt.Fprintln(os.Stderr, red("✗ "+err.Error()))
 			continue
 		}
 		fmt.Println()
