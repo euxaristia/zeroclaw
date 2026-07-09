@@ -135,7 +135,24 @@ func seed() error {
 	if _, err := docker("exec", Container, "sh", "-c", script); err != nil {
 		return err
 	}
-	return adoptZeroAuth()
+	if err := adoptZeroAuth(); err != nil {
+		return err
+	}
+	return allowSandboxNetwork()
+}
+
+// allowSandboxNetwork opens zero's inner network sandbox inside the container.
+// The host config adopted by adoptZeroAuth carries the host's default (deny),
+// but in here the container is the isolation boundary, so denying egress only
+// strands the agent (it cannot reach GitHub while gh, git, and curl sit
+// installed for exactly that). Only a missing setting is filled in: an
+// operator who deliberately set "deny" in the agent's config keeps it.
+func allowSandboxNetwork() error {
+	script := `f=~/.config/zero/config.json
+[ -e "$f" ] || exit 0
+jq '.sandbox.network //= "allow"' "$f" > "$f.tmp" && mv "$f.tmp" "$f"`
+	_, err := docker("exec", Container, "sh", "-c", script)
+	return err
 }
 
 // adoptZeroAuth copies the host zero provider config and encrypted credential

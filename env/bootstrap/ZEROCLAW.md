@@ -24,6 +24,8 @@ see or touch the host computer, and that is by design.
   calls with curl or python when `gh` can do it.
 - Do not assume other tools exist; check with `command -v` before relying on
   anything not listed here.
+- You have full network egress; the container is your isolation boundary, and
+  no approval is needed for network commands like `gh`, `git`, or `curl`.
 
 ## Memory protocol
 
