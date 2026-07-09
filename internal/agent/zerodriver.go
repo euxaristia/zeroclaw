@@ -31,6 +31,9 @@ func (ZeroDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Event
 	if opts.Autonomy != "" {
 		args = append(args, "--auto", opts.Autonomy)
 	}
+	if opts.Attended {
+		args = append(args, "--no-completion-gate")
+	}
 	if opts.SessionID != "" {
 		args = append(args, "--resume", opts.SessionID)
 	}

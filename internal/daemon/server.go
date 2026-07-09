@@ -177,6 +177,7 @@ func (s *server) Turn(ctx context.Context, conversation, prompt, autonomy string
 		SessionID: s.sessions.Get(conversation),
 		Prompt:    prompt,
 		Autonomy:  autonomy,
+		Attended:  true, // Telegram turns have an operator on the other end
 	}
 	res, err := s.driver.Turn(ctx, opts, nil)
 	if res.SessionID != "" && opts.SessionID == "" {
@@ -241,6 +242,7 @@ func (s *server) handleTurn(w http.ResponseWriter, r *http.Request) {
 		SessionID: s.sessions.Get(req.Conversation),
 		Prompt:    req.Prompt,
 		Autonomy:  req.Autonomy,
+		Attended:  true, // /turn callers (chat, exec) have an operator present
 	}
 	res, err := s.driver.Turn(r.Context(), opts, func(ev agent.Event) { emit(ev) })
 	trailer := Trailer{Type: "zeroclaw_result", SessionID: res.SessionID, Status: res.Status, Final: res.Final}

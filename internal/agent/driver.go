@@ -38,6 +38,13 @@ type TurnOptions struct {
 	// Autonomy is low, medium, or high. Inside the container boundary the
 	// daemon will run high; the M0 CLI path defaults to medium.
 	Autonomy string
+	// Attended marks a turn with an operator present to reply (chat, exec,
+	// telegram). The driver relaxes the backend's headless completion gate for
+	// these: "I'm blocked on X, say the word and I'll continue" is a complete
+	// conversational answer, not an unfinished task. Scheduled turns
+	// (heartbeats) leave this false so unattended runs still surface
+	// INCOMPLETE honestly.
+	Attended bool
 }
 
 type TurnResult struct {
