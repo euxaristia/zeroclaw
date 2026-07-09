@@ -20,7 +20,7 @@ import (
 )
 
 // Telegram Bot API surface we use. Long polling only; no webhooks, no inbound
-// port (magic-prompt.md:167, :210).
+// port (AGENTS.md, Stack and non-goals).
 const telegramAPIBase = "https://api.telegram.org/bot"
 
 // defaultPollTimeout bounds each getUpdates call; Telegram holds the
