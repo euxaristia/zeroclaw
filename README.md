@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/banner.jpeg" alt="zeroclaw" width="560">
+</p>
+
 # zeroclaw 🦞
 
 An autonomous personal agent that lives in its own isolated Linux environment.
@@ -81,6 +85,16 @@ go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2 run --enab
 `go fmt` rewrites files, so run it, review the diff, then commit. The linter
 pinned version must match CI (currently v2.12.2).
 
+Periodically (and before releases), scan for known vulnerabilities in the
+toolchain and standard library:
+
+```
+go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+```
+
+The module is stdlib-only, so findings can only come from the Go standard
+library or the toolchain itself; fix by bumping the Go version.
+
 ## Commands ⌨️
 
 ```
@@ -126,7 +140,7 @@ internal/agent/    driver interface, zero stream-JSON driver, conversation map
 internal/env/      container lifecycle, give/take, doctor
 internal/config/   host config in ~/.zeroclaw
 env/               Dockerfile and bootstrap seeds (env/bin is untracked)
-magic-prompt.md    the full design plan
+AGENTS.md          design, architecture, and guidelines for working on the repo
 ```
 
 ## Status 🗺️
@@ -134,4 +148,4 @@ magic-prompt.md    the full design plan
 M0 (walking skeleton), M1 (daemon and client split), M2 (scheduler,
 heartbeat, memory loop), and M3 (Telegram channel via long polling with a
 single-owner chat allowlist) are done. Next: hardening (fallback tier, egress
-allowlist, autostart). Details in `magic-prompt.md`.
+allowlist, autostart). Details in `AGENTS.md`.
