@@ -79,29 +79,32 @@ seeds the agent's home with its identity, memory index, and heartbeat files
 
 ## Development 🛠️
 
-Run these four checks before every commit. CI gates on them (see
-`.github/workflows/ci.yml`): `gofmt -l .` must report nothing, `go vet ./...`
-and `go test ./...` must pass, and `golangci-lint` is an advisory gate.
+Before committing any changes, run all Go code quality and security checks:
 
+1. **Formatting**: Run `go fmt ./...`.
+2. **Vetting**: Run `go vet ./...`.
+3. **Linting**: Run `golangci-lint run`.
+4. **Vulnerability Scan**: Run `govulncheck ./...`.
+
+If `golangci-lint` or `govulncheck` are not installed, install them with:
+
+```bash
+# Install golangci-lint
+go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+# Install govulncheck
+go install golang.org/x/vuln/cmd/govulncheck@latest
 ```
-go fmt ./...      # must report no changes (rewrites files in place)
-go vet ./...      # must pass
-go test ./...     # must pass
+
+Alternatively, you can run them directly without installation using `go run`:
+
+```bash
+# Lint via go run
 go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2 run --enable-only unused,ineffassign,staticcheck ./...
-```
 
-`go fmt` rewrites files, so run it, review the diff, then commit. The linter
-pinned version must match CI (currently v2.12.2).
-
-Periodically (and before releases), scan for known vulnerabilities in the
-toolchain and standard library:
-
-```
+# Scan via go run
 go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 ```
-
-The module is stdlib-only, so findings can only come from the Go standard
-library or the toolchain itself; fix by bumping the Go version.
 
 ## Commands ⌨️
 

@@ -228,8 +228,12 @@ are done and shipped. Remaining hardening items, none started:
 - Minimal deps, early returns, no em dashes in any authored text. Go idioms over
   the TS style rules in the global CLAUDE.md.
 - No git actions of any kind without explicit consent.
-- Verify before committing: `go build ./... && go vet ./... && go test ./...`
-  must pass, and changed files must be gofmt-clean.
+- Verify before committing. You MUST run all Go code quality and security checks before committing code or completing your task:
+  1. **Formatting**: Run `go fmt ./...` to format code.
+  2. **Vetting**: Run `go vet ./...` to check for common mistakes.
+  3. **Linting**: Run `golangci-lint run` to inspect code style and quality.
+  4. **Vulnerability Scanning**: Run `govulncheck ./...` to check for security vulnerabilities.
+  If any of these tools (`golangci-lint` or `govulncheck`) are not installed or are unavailable in the path when you attempt to run them, do not ignore the check. You must prompt the user with instructions to install them (e.g., `go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest` or `go install golang.org/x/vuln/cmd/govulncheck@latest`) and ask for confirmation/action before proceeding.
 - Changes to the environment need a real end-to-end check (a turn through
   `zeroclaw exec`, or a command inside the container), not just tests.
 - Remember the two-step rollout: `zeroclaw up` only builds the image when it is
