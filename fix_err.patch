@@ -1,0 +1,35 @@
+--- internal/channels/telegram.go
++++ internal/channels/telegram.go
+@@ -125,14 +125,28 @@
+	Result []update `json:"result"`
+ }
+
++type sanitizedError struct {
++	err   error
++	token string
++}
++
++func (e sanitizedError) Error() string {
++	if e.token == "" {
++		return e.err.Error()
++	}
++	return strings.ReplaceAll(e.err.Error(), e.token, "***")
++}
++
++func (e sanitizedError) Unwrap() error {
++	return e.err
++}
++
+ func (c *Channel) sanitizeErr(err error) error {
+	if err == nil {
+		return nil
+	}
+-	// The bot token is embedded in the URL (https://api.telegram.org/bot<token>/...),
+-	// and Go's http.Client includes the URL in *url.Error. We must scrub it so
+-	// network flakes don't leak the token to the daemon log.
+-	msg := strings.ReplaceAll(err.Error(), c.token, "***")
+-	return fmt.Errorf("%s", msg)
++	return sanitizedError{err: err, token: c.token}
+ }
+
+ func (c *Channel) getUpdates(ctx context.Context, offset int) ([]update, error) {

@@ -125,15 +125,41 @@ type getUpdatesResponse struct {
 	Result []update `json:"result"`
 }
 
+type sanitizedError struct {
+	err   error
+	token string
+}
+
+func (e sanitizedError) Error() string {
+	if e.token == "" {
+		return e.err.Error()
+	}
+	// The bot token is embedded in the URL (https://api.telegram.org/bot<token>/...),
+	// and Go's http.Client includes the URL in *url.Error. We must scrub it so
+	// network flakes don't leak the token to the daemon log.
+	return strings.ReplaceAll(e.err.Error(), e.token, "***")
+}
+
+func (e sanitizedError) Unwrap() error {
+	return e.err
+}
+
+func (c *Channel) sanitizeErr(err error) error {
+	if err == nil {
+		return nil
+	}
+	return sanitizedError{err: err, token: c.token}
+}
+
 func (c *Channel) getUpdates(ctx context.Context, offset int) ([]update, error) {
 	url := fmt.Sprintf("%s/getUpdates?offset=%d&timeout=%d", c.baseURL, offset, int(defaultPollTimeout.Seconds()))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, err
+		return nil, c.sanitizeErr(err)
 	}
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, c.sanitizeErr(err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
@@ -215,12 +241,12 @@ func (c *Channel) sendOne(ctx context.Context, chatID, text string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/sendMessage",
 		bytes.NewReader(payload))
 	if err != nil {
-		return err
+		return c.sanitizeErr(err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return err
+		return c.sanitizeErr(err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
