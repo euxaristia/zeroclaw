@@ -44,6 +44,29 @@ type Channel struct {
 	client  *http.Client
 }
 
+type sanitizedError struct {
+	err   error
+	token string
+}
+
+func (s *sanitizedError) Error() string {
+	return strings.ReplaceAll(s.err.Error(), s.token, "[REDACTED]")
+}
+
+func (s *sanitizedError) Unwrap() error {
+	return s.err
+}
+
+func (c *Channel) sanitizeErr(err error) error {
+	if err == nil {
+		return nil
+	}
+	if c.token == "" {
+		return err
+	}
+	return &sanitizedError{err: err, token: c.token}
+}
+
 // Backend is the small surface the channel needs from the daemon. It is an
 // interface so tests can drive the loop with a fake.
 type Backend interface {
@@ -129,11 +152,11 @@ func (c *Channel) getUpdates(ctx context.Context, offset int) ([]update, error) 
 	url := fmt.Sprintf("%s/getUpdates?offset=%d&timeout=%d", c.baseURL, offset, int(defaultPollTimeout.Seconds()))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, err
+		return nil, c.sanitizeErr(err)
 	}
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, c.sanitizeErr(err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
@@ -215,12 +238,12 @@ func (c *Channel) sendOne(ctx context.Context, chatID, text string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/sendMessage",
 		bytes.NewReader(payload))
 	if err != nil {
-		return err
+		return c.sanitizeErr(err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return err
+		return c.sanitizeErr(err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
