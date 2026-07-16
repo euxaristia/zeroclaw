@@ -12,7 +12,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -45,9 +44,6 @@ type Channel struct {
 	client  *http.Client
 }
 
-// sanitizedError wraps an error whose formatted message must not surface the
-// bot token, while preserving Unwrap so errors.As/errors.Is still see the
-// original error shape (with the token already scrubbed for *url.Error).
 type sanitizedError struct {
 	err   error
 	token string
@@ -61,19 +57,12 @@ func (s *sanitizedError) Unwrap() error {
 	return s.err
 }
 
-// sanitizeErr scrubs the bot token out of errors returned by http.Client.
-// The token lives in the request URL, and Go's http.Client embeds that URL
-// in *url.Error on failure. Redacting only the formatted message would leave
-// the raw token reachable via errors.As(err, &urlErr); *url.Error.URL, so for
-// that case we clone the error with its URL field redacted before wrapping.
 func (c *Channel) sanitizeErr(err error) error {
-	if err == nil || c.token == "" {
-		return err
+	if err == nil {
+		return nil
 	}
-	if urlErr, ok := err.(*url.Error); ok {
-		redacted := *urlErr
-		redacted.URL = strings.ReplaceAll(redacted.URL, c.token, "[REDACTED]")
-		return &sanitizedError{err: &redacted, token: c.token}
+	if c.token == "" {
+		return err
 	}
 	return &sanitizedError{err: err, token: c.token}
 }
