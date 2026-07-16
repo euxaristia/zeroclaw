@@ -8,10 +8,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -133,7 +135,7 @@ func (c *Channel) getUpdates(ctx context.Context, offset int) ([]update, error) 
 	}
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, sanitizeError(err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
@@ -220,7 +222,7 @@ func (c *Channel) sendOne(ctx context.Context, chatID, text string) error {
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return err
+		return sanitizeError(err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
@@ -270,6 +272,31 @@ func chunkMessage(text string) []string {
 		out = append(out, string(runes[start:]))
 	}
 	return out
+}
+
+// sanitizedURLError hides the full URL to avoid leaking secrets (like the Bot API token).
+type sanitizedURLError struct {
+	err *url.Error
+}
+
+func (e *sanitizedURLError) Error() string {
+	return fmt.Sprintf("%s [REDACTED]: %v", e.err.Op, e.err.Err)
+}
+
+func (e *sanitizedURLError) Unwrap() error {
+	return e.err.Err
+}
+
+// sanitizeError wraps url.Error to prevent leaking the token in logs.
+func sanitizeError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var uerr *url.Error
+	if errors.As(err, &uerr) {
+		return &sanitizedURLError{err: uerr}
+	}
+	return err
 }
 
 // safeFinal returns a readable reply when the agent produced none.

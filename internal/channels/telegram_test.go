@@ -3,9 +3,11 @@ package channels
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -283,5 +285,29 @@ func TestChunkMessage(t *testing.T) {
 	// Empty input yields no chunks, so callers never POST empty text.
 	if got := chunkMessage(""); got != nil {
 		t.Fatalf("empty input should yield nil, got %v", got)
+	}
+}
+
+func TestSanitizeError(t *testing.T) {
+	rawURL := "https://api.telegram.org/botSECRET_TOKEN/getUpdates"
+	originalErr := errors.New("connection reset by peer")
+	uerr := &url.Error{Op: "Get", URL: rawURL, Err: originalErr}
+
+	sanitized := sanitizeError(uerr)
+	if sanitized == nil {
+		t.Fatal("expected sanitized error, got nil")
+	}
+
+	msg := sanitized.Error()
+	if strings.Contains(msg, "SECRET_TOKEN") {
+		t.Errorf("sanitized error leaked token: %s", msg)
+	}
+	if !strings.Contains(msg, "[REDACTED]") {
+		t.Errorf("sanitized error missing [REDACTED]: %s", msg)
+	}
+
+	// Test Unwrap
+	if !errors.Is(sanitized, originalErr) {
+		t.Errorf("sanitized error did not unwrap to original error")
 	}
 }

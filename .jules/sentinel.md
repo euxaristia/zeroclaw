@@ -2,3 +2,8 @@
 **Vulnerability:** The daemon server used standard string equality (`==` or `!=`) to validate bearer tokens from the client (`r.Header.Get("Authorization") != "Bearer "+s.token`). It also initialized its `http.Server` without timeouts.
 **Learning:** Standard string equality checks return as soon as a mismatch is found. This short-circuit behavior allows an attacker to deduce a valid token character by character, measuring the exact time a request takes. Moreover, a lack of `ReadHeaderTimeout` on a server leaves it vulnerable to Slowloris attacks where clients hold connections open indefinitely.
 **Prevention:** Use `crypto/subtle.ConstantTimeCompare` when comparing secrets like authentication tokens or passwords. This compares both byte slices in constant time, regardless of their contents, preventing timing side-channels. Always configure `ReadHeaderTimeout` on `http.Server` instances to prevent connection exhaustion attacks.
+
+## 2025-03-01 - URL Error Token Leak
+**Vulnerability:** The Telegram Bot API requires the bot token to be passed in the URL (e.g., `https://api.telegram.org/bot<TOKEN>/...`). When `http.Client.Do` fails, it returns a `*url.Error` which includes the full requested URL. Logging this error directly leaks the bot token.
+**Learning:** `*url.Error` always includes the requested URL. When calling APIs that embed secrets in the URL, any logging or upstream returning of standard HTTP client errors will expose those secrets.
+**Prevention:** Wrap or sanitize errors returned by `http.Client` when interacting with APIs that use URL-embedded credentials. Implement a custom error wrapper that redacts the URL in its `Error()` string but properly implements `Unwrap()` to preserve the underlying root cause for upstream handling.
