@@ -11,3 +11,8 @@
 **Vulnerability:** The daemon's `http.Server` was initialized without `ReadTimeout` or `IdleTimeout`, making it susceptible to Slowloris connection exhaustion attacks. In addition, the `/turn` endpoint lacked limits on the size of the request payload causing it to read an unbounded JSON request body which could lead to Out of Memory (OOM) errors.
 **Learning:** Even internal or local-only Go HTTP servers should have explicit timeouts to prevent attackers or misbehaving clients from consuming all available connection slots. In addition, parsing arbitrary JSON data from `r.Body` without wrapping it in a `MaxBytesReader` can let an attacker exhaust memory resources.
 **Prevention:** Always configure `ReadTimeout` and `IdleTimeout` on `http.Server` definitions. Remember that `WriteTimeout` shouldn't be added for endpoints returning streaming data (like SSE or long polls). To limit request size in Go, apply `http.MaxBytesReader` before passing `r.Body` to Decoders or reading it into memory.
+
+## 2025-02-28 - Error Detail Leakage in External Channels
+**Vulnerability:** The Telegram channel handler `handleUpdate` forwarded the raw error message (`err.Error()`) to users when an internal execution error occurred.
+**Learning:** Forwarding raw error strings to end-users can inadvertently expose internal stack traces, system paths, or downstream API details over the external channel.
+**Prevention:** Always log the detailed error internally on the server but return a sanitized, generic error message (e.g., "An error occurred. Please check the logs.") to external callers or users to fail securely.
