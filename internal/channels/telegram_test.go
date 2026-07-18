@@ -258,6 +258,10 @@ func TestSanitizedError(t *testing.T) {
 	if sanitized.Unwrap() != baseErr {
 		t.Fatalf("expected Unwrap() to return base error, got %v", sanitized.Unwrap())
 	}
+
+	if got := sanitizeError(baseErr, ""); got != baseErr {
+		t.Fatalf("empty token should return the original error unchanged, got %v", got)
+	}
 }
 
 func TestChunkMessage(t *testing.T) {

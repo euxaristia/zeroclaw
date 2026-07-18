@@ -47,8 +47,10 @@ func (e *sanitizedError) Unwrap() error {
 }
 
 func sanitizeError(err error, token string) error {
-	if err == nil {
-		return nil
+	// An empty token would make ReplaceAll insert the marker between every
+	// character of the message, so there is nothing to redact and no wrap.
+	if err == nil || token == "" {
+		return err
 	}
 	return &sanitizedError{err: err, token: token}
 }
