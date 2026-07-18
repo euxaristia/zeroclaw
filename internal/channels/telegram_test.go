@@ -53,18 +53,26 @@ func (f *fakeBackend) gotTurns() []string {
 
 // botServer is a minimal fake Telegram Bot API. It returns the queued updates
 // once, then 200/empty for subsequent polls. sendMessage records replies.
-func botServer(t *testing.T, updates []update) (*httptest.Server, *[]string) {
+type botServerResult struct {
+	mu   sync.Mutex
+	sent []string
+}
+func (b *botServerResult) getSent() []string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return append([]string(nil), b.sent...)
+}
+func botServer(t *testing.T, updates []update) (*httptest.Server, *botServerResult) {
 	t.Helper()
-	sent := &[]string{}
-	var mu sync.Mutex
+	res := &botServerResult{}
 	pending := updates
 	served := false
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/getUpdates"):
-			mu.Lock()
-			defer mu.Unlock()
+			res.mu.Lock()
+			defer res.mu.Unlock()
 			var result []update
 			if !served {
 				result = pending
@@ -77,16 +85,16 @@ func botServer(t *testing.T, updates []update) (*httptest.Server, *[]string) {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			mu.Lock()
-			*sent = append(*sent, req.Text)
-			mu.Unlock()
+			res.mu.Lock()
+			res.sent = append(res.sent, req.Text)
+			res.mu.Unlock()
 			json.NewEncoder(w).Encode(sendMessageResponse{OK: true})
 		default:
 			http.Error(w, "not found", http.StatusNotFound)
 		}
 	}))
 	t.Cleanup(srv.Close)
-	return srv, sent
+	return srv, res
 }
 
 func newTestChannel(baseURL string, fb Backend) *Channel {
@@ -116,7 +124,7 @@ func TestChannelDeliversTurn(t *testing.T) {
 
 	deadline := time.After(2 * time.Second)
 	for {
-		if len(fb.gotTurns()) > 0 {
+		if len(fb.gotTurns()) > 0 && len(sent.getSent()) > 0 {
 			break
 		}
 		select {
@@ -131,8 +139,9 @@ func TestChannelDeliversTurn(t *testing.T) {
 	if got := fb.gotTurns(); len(got) != 1 || got[0] != "ping me" {
 		t.Fatalf("unexpected turns: %v", got)
 	}
-	if len(*sent) != 1 || (*sent)[0] != "hello from agent" {
-		t.Fatalf("unexpected replies sent: %v", *sent)
+	sentMsg := sent.getSent()
+	if len(sentMsg) != 1 || sentMsg[0] != "hello from agent" {
+		t.Fatalf("unexpected replies sent: %v", sentMsg)
 	}
 }
 
@@ -146,7 +155,7 @@ func TestChannelRejectsUnknownChat(t *testing.T) {
 
 	deadline := time.After(2 * time.Second)
 	for {
-		if len(*sent) > 0 {
+		if len(sent.getSent()) > 0 {
 			break
 		}
 		select {
@@ -161,8 +170,9 @@ func TestChannelRejectsUnknownChat(t *testing.T) {
 	if len(fb.gotTurns()) != 0 {
 		t.Fatalf("backend should not have been called: %v", fb.gotTurns())
 	}
-	if len(*sent) != 1 || !strings.Contains((*sent)[0], "not authorized") {
-		t.Fatalf("expected unauthorized reply, got: %v", *sent)
+	sentMsg := sent.getSent()
+	if len(sentMsg) != 1 || !strings.Contains(sentMsg[0], "not authorized") {
+		t.Fatalf("expected unauthorized reply, got: %v", sentMsg)
 	}
 }
 
@@ -206,7 +216,7 @@ func TestChannelReportsTurnError(t *testing.T) {
 
 	deadline := time.After(2 * time.Second)
 	for {
-		if len(*sent) > 0 {
+		if len(sent.getSent()) > 0 {
 			break
 		}
 		select {
@@ -218,8 +228,9 @@ func TestChannelReportsTurnError(t *testing.T) {
 	}
 	cancel()
 
-	if len(*sent) != 1 || !strings.Contains((*sent)[0], "turn failed") {
-		t.Fatalf("expected turn-failed reply, got: %v", *sent)
+	sentMsg := sent.getSent()
+	if len(sentMsg) != 1 || !strings.Contains(sentMsg[0], "turn failed") {
+		t.Fatalf("expected turn-failed reply, got: %v", sentMsg)
 	}
 }
 
