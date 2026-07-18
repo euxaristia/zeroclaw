@@ -139,6 +139,8 @@ func RunServer() error {
 	httpSrv := &http.Server{
 		Handler:           s.auth(mux),
 		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 	errCh := make(chan error, 1)
 	go func() { errCh <- httpSrv.Serve(ln) }()
@@ -225,6 +227,7 @@ func (s *server) handleConversations(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleTurn(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1024*1024)
 	var req TurnRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Prompt == "" {
 		http.Error(w, "bad turn request", http.StatusBadRequest)
