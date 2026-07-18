@@ -6,6 +6,7 @@ package daemon
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
@@ -138,6 +139,8 @@ func RunServer() error {
 	httpSrv := &http.Server{
 		Handler:           s.auth(mux),
 		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 	errCh := make(chan error, 1)
 	go func() { errCh <- httpSrv.Serve(ln) }()
@@ -201,7 +204,13 @@ func (s *server) auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		auth := r.Header.Get("Authorization")
 		expected := "Bearer " + s.token
-		if subtle.ConstantTimeCompare([]byte(auth), []byte(expected)) != 1 {
+
+		// Hash both tokens to prevent length-based timing leaks.
+		// subtle.ConstantTimeCompare returns immediately if lengths mismatch.
+		authHash := sha256.Sum256([]byte(auth))
+		expectedHash := sha256.Sum256([]byte(expected))
+
+		if subtle.ConstantTimeCompare(authHash[:], expectedHash[:]) != 1 {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
@@ -218,6 +227,7 @@ func (s *server) handleConversations(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleTurn(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1024*1024)
 	var req TurnRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Prompt == "" {
 		http.Error(w, "bad turn request", http.StatusBadRequest)

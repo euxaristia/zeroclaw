@@ -201,7 +201,7 @@ func (c *Channel) handleUpdate(ctx context.Context, up update) {
 	res, err := c.backend.Turn(ctx, "telegram-"+chatID, text, "high")
 	if err != nil {
 		log.Printf("telegram: turn failed for chat %s: %v", chatID, err)
-		c.send(ctx, chatID, "Sorry, that turn failed: "+err.Error())
+		c.send(ctx, chatID, "Sorry, that turn failed. Please check the logs.")
 		return
 	}
 	c.send(ctx, chatID, safeFinal(res.Final))
