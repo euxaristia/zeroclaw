@@ -16,3 +16,8 @@
 **Vulnerability:** The Telegram channel handler `handleUpdate` forwarded the raw error message (`err.Error()`) to users when an internal execution error occurred.
 **Learning:** Forwarding raw error strings to end-users can inadvertently expose internal stack traces, system paths, or downstream API details over the external channel.
 **Prevention:** Always log the detailed error internally on the server but return a sanitized, generic error message (e.g., "An error occurred. Please check the logs.") to external callers or users to fail securely.
+
+## 2026-07-17 - Prevent Secret Leakage in Go http.Client URL Errors
+**Vulnerability:** Go's `http.Client` operations return `*url.Error` upon failure, which includes the full requested URL string. When calling the Telegram Bot API (or other services embedding secrets in the URL like `https://api.telegram.org/bot<TOKEN>/...`), returning or logging this error directly leaks the bot token in plaintext.
+**Learning:** Returning standard library errors directly without sanitization can inadvertently leak secrets when those secrets are part of the request coordinates (URLs, paths) rather than headers or body. Simple string replacement on the error output loses the underlying error type chain unless properly wrapped.
+**Prevention:** Implement a custom error struct (e.g., `sanitizedError`) that implements both `Error() string` (to redact the token via `strings.ReplaceAll`) and `Unwrap() error` (to preserve the original error for `errors.Is`/`errors.As` checks). Wrap errors returning from sensitive `http.Client` calls using a deferred helper.

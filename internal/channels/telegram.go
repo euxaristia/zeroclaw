@@ -33,6 +33,28 @@ const defaultPollTimeout = 30 * time.Second
 // runes (emoji, CJK Ext-B+) count as two units each.
 const maxMessageUnits = 4096
 
+type sanitizedError struct {
+	err   error
+	token string
+}
+
+func (e *sanitizedError) Error() string {
+	return strings.ReplaceAll(e.err.Error(), e.token, "***REDACTED***")
+}
+
+func (e *sanitizedError) Unwrap() error {
+	return e.err
+}
+
+func sanitizeError(err error, token string) error {
+	// An empty token would make ReplaceAll insert the marker between every
+	// character of the message, so there is nothing to redact and no wrap.
+	if err == nil || token == "" {
+		return err
+	}
+	return &sanitizedError{err: err, token: token}
+}
+
 // Channel drives one Telegram bot for its lifetime: it long-polls getUpdates,
 // dispatches allowed chats to the daemon, and sends replies. Callers pass a
 // Backend so the long-poll loop is testable without a real bot token.
@@ -125,7 +147,10 @@ type getUpdatesResponse struct {
 	Result []update `json:"result"`
 }
 
-func (c *Channel) getUpdates(ctx context.Context, offset int) ([]update, error) {
+func (c *Channel) getUpdates(ctx context.Context, offset int) (updates []update, err error) {
+	defer func() {
+		err = sanitizeError(err, c.token)
+	}()
 	url := fmt.Sprintf("%s/getUpdates?offset=%d&timeout=%d", c.baseURL, offset, int(defaultPollTimeout.Seconds()))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -207,7 +232,10 @@ func (c *Channel) send(ctx context.Context, chatID, text string) {
 	}
 }
 
-func (c *Channel) sendOne(ctx context.Context, chatID, text string) error {
+func (c *Channel) sendOne(ctx context.Context, chatID, text string) (err error) {
+	defer func() {
+		err = sanitizeError(err, c.token)
+	}()
 	payload, err := json.Marshal(sendMessageRequest{ChatID: chatID, Text: text, DisableWebPagePreview: true})
 	if err != nil {
 		return err

@@ -238,6 +238,32 @@ func utf16Units(s string) int {
 	return n
 }
 
+func TestSanitizedError(t *testing.T) {
+	token := "secret_bot_token"
+	baseErr := fmt.Errorf("http request failed for https://api.telegram.org/bot%s/getUpdates", token)
+	err := sanitizeError(baseErr, token)
+
+	if !strings.Contains(err.Error(), "***REDACTED***") {
+		t.Fatalf("expected error string to contain redacted marker, got: %s", err.Error())
+	}
+	if strings.Contains(err.Error(), token) {
+		t.Fatalf("expected error string not to contain secret token, got: %s", err.Error())
+	}
+
+	sanitized, ok := err.(*sanitizedError)
+	if !ok {
+		t.Fatalf("expected error to be *sanitizedError, got %T", err)
+	}
+
+	if sanitized.Unwrap() != baseErr {
+		t.Fatalf("expected Unwrap() to return base error, got %v", sanitized.Unwrap())
+	}
+
+	if got := sanitizeError(baseErr, ""); got != baseErr {
+		t.Fatalf("empty token should return the original error unchanged, got %v", got)
+	}
+}
+
 func TestChunkMessage(t *testing.T) {
 	// A single long run of ASCII stays under the limit in one chunk.
 	short := strings.Repeat("a", 10)
