@@ -221,6 +221,9 @@ func TestChannelReportsTurnError(t *testing.T) {
 	if len(*sent) != 1 || !strings.Contains((*sent)[0], "turn failed") {
 		t.Fatalf("expected turn-failed reply, got: %v", *sent)
 	}
+	if strings.Contains((*sent)[0], "boom") {
+		t.Fatalf("reply leaked raw error detail: %v", *sent)
+	}
 }
 
 func utf16Units(s string) int {
