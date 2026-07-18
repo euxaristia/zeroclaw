@@ -6,6 +6,7 @@ package daemon
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
@@ -201,7 +202,13 @@ func (s *server) auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		auth := r.Header.Get("Authorization")
 		expected := "Bearer " + s.token
-		if subtle.ConstantTimeCompare([]byte(auth), []byte(expected)) != 1 {
+
+		// Hash both tokens to prevent length-based timing leaks.
+		// subtle.ConstantTimeCompare returns immediately if lengths mismatch.
+		authHash := sha256.Sum256([]byte(auth))
+		expectedHash := sha256.Sum256([]byte(expected))
+
+		if subtle.ConstantTimeCompare(authHash[:], expectedHash[:]) != 1 {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
