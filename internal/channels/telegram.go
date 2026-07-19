@@ -85,7 +85,8 @@ func NewChannel(tg config.Telegram, srv Backend) *Channel {
 		allowed: allowed,
 		backend: srv,
 		baseURL: telegramAPIBase + tg.Token,
-		client:  &http.Client{},
+		// Timeout includes long-poll duration plus network buffer to prevent unbounded hangs.
+		client: &http.Client{Timeout: defaultPollTimeout + 10*time.Second},
 	}
 }
 

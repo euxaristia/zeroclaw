@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"zeroclaw/internal/agent"
 	"zeroclaw/internal/daemon"
@@ -30,7 +31,9 @@ func turnStream(conversation, prompt string, onEvent func(agent.Event)) (daemon.
 	req.Header.Set("Authorization", "Bearer "+info.Token)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	// The turn stream can take several minutes to generate a response for complex tasks.
+	client := &http.Client{Timeout: 5 * time.Minute}
+	resp, err := client.Do(req)
 	if err != nil {
 		return daemon.Trailer{}, err
 	}
