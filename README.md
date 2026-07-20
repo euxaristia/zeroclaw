@@ -83,7 +83,7 @@ Run these four checks before every commit. CI gates on them (see
 `.github/workflows/ci.yml`): `gofmt -l .` must report nothing, `go vet ./...`
 and `go test ./...` must pass, and `golangci-lint` is an advisory gate.
 
-```
+```bash
 go fmt ./...      # must report no changes (rewrites files in place)
 go vet ./...      # must pass
 go test ./...     # must pass
@@ -94,14 +94,22 @@ go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2 run --enab
 pinned version must match CI (currently v2.12.2).
 
 Periodically (and before releases), scan for known vulnerabilities in the
-toolchain and standard library:
+toolchain and standard library, using the same version CI pins:
 
-```
-go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+```bash
+go run golang.org/x/vuln/cmd/govulncheck@v1.3.0 ./...
 ```
 
 The module is stdlib-only, so findings can only come from the Go standard
 library or the toolchain itself; fix by bumping the Go version.
+
+If `go run` can't fetch these modules (e.g. no network access), install them
+locally instead, pinned to the same versions CI uses:
+
+```bash
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
+go install golang.org/x/vuln/cmd/govulncheck@v1.3.0
+```
 
 ## Commands ⌨️
 

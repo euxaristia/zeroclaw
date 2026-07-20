@@ -229,7 +229,11 @@ are done and shipped. Remaining hardening items, none started:
   the TS style rules in the global CLAUDE.md.
 - No git actions of any kind without explicit consent.
 - Verify before committing: `go build ./... && go vet ./... && go test ./...`
-  must pass, and changed files must be gofmt-clean.
+  must pass, and changed files must be gofmt-clean. Also run the pinned
+  golangci-lint and govulncheck commands from README.md's Development section
+  (same versions CI uses). If `go run` cannot fetch either tool (e.g. no
+  network access), tell the user which tool and pinned version is needed and
+  ask before proceeding, rather than skipping the check silently.
 - Changes to the environment need a real end-to-end check (a turn through
   `zeroclaw exec`, or a command inside the container), not just tests.
 - Remember the two-step rollout: `zeroclaw up` only builds the image when it is
