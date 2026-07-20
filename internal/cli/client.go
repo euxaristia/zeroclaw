@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"time"
 
@@ -31,8 +32,16 @@ func turnStream(conversation, prompt string, onEvent func(agent.Event)) (daemon.
 	req.Header.Set("Authorization", "Bearer "+info.Token)
 	req.Header.Set("Content-Type", "application/json")
 
-	// The turn stream can take several minutes to generate a response for complex tasks.
-	client := &http.Client{Timeout: 5 * time.Minute}
+	// Bound only connect time and time-to-first-response-byte, not the whole
+	// request: turns stream a live agent run and can legitimately take much
+	// longer than any fixed client.Timeout (which would cover body reads too
+	// and abort a long-running turn mid-stream).
+	client := &http.Client{
+		Transport: &http.Transport{
+			DialContext:           (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
+			ResponseHeaderTimeout: 30 * time.Second,
+		},
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return daemon.Trailer{}, err
