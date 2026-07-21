@@ -5,11 +5,25 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
+	"time"
 
 	"zeroclaw/internal/agent"
 	"zeroclaw/internal/daemon"
 )
+
+// streamClient bounds only connect time and time-to-first-response-byte, not
+// the whole request: turns stream a live agent run and can legitimately take
+// much longer than any fixed client.Timeout (which would cover body reads too
+// and abort a long-running turn mid-stream). Package-level so repeated turns
+// in one CLI process reuse pooled connections.
+var streamClient = &http.Client{
+	Transport: &http.Transport{
+		DialContext:           (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
+		ResponseHeaderTimeout: 30 * time.Second,
+	},
+}
 
 // turnStream sends one turn to zeroclawd and streams driver events back.
 // The CLI never executes agent logic in-process; if the daemon is down, the
@@ -30,7 +44,7 @@ func turnStream(conversation, prompt string, onEvent func(agent.Event)) (daemon.
 	req.Header.Set("Authorization", "Bearer "+info.Token)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := streamClient.Do(req)
 	if err != nil {
 		return daemon.Trailer{}, err
 	}
