@@ -136,7 +136,7 @@ func TestChannelDeliversTurn(t *testing.T) {
 	}
 }
 
-func TestChannelRejectsUnknownChat(t *testing.T) {
+func TestChannelRejectsUnknownChatSilently(t *testing.T) {
 	fb := &fakeBackend{allowed: map[string]bool{"999": true}}
 	srv, sent := botServer(t, []update{mkUpdate(123, "intruder")})
 
@@ -144,25 +144,15 @@ func TestChannelRejectsUnknownChat(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	go ch.Run(ctx)
 
-	deadline := time.After(2 * time.Second)
-	for {
-		if len(*sent) > 0 {
-			break
-		}
-		select {
-		case <-deadline:
-			cancel()
-			t.Fatal("rejection message never sent")
-		case <-time.After(5 * time.Millisecond):
-		}
-	}
+	// Wait briefly to allow processing
+	time.Sleep(100 * time.Millisecond)
 	cancel()
 
 	if len(fb.gotTurns()) != 0 {
 		t.Fatalf("backend should not have been called: %v", fb.gotTurns())
 	}
-	if len(*sent) != 1 || !strings.Contains((*sent)[0], "not authorized") {
-		t.Fatalf("expected unauthorized reply, got: %v", *sent)
+	if len(*sent) != 0 {
+		t.Errorf("expected silent rejection, but a reply was sent: %v", *sent)
 	}
 }
 

@@ -186,8 +186,7 @@ func (c *Channel) handleUpdate(ctx context.Context, up update) {
 		return
 	}
 	if !c.backend.IsAllowedChat(chatID) {
-		log.Printf("telegram: rejecting message from non-allowed chat %s", chatID)
-		c.send(ctx, chatID, "This chat is not authorized to talk to zeroclaw.")
+		log.Printf("telegram: silently rejecting message from non-allowed chat %s", chatID)
 		return
 	}
 
