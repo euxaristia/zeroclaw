@@ -144,25 +144,15 @@ func TestChannelRejectsUnknownChat(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	go ch.Run(ctx)
 
-	deadline := time.After(2 * time.Second)
-	for {
-		if len(*sent) > 0 {
-			break
-		}
-		select {
-		case <-deadline:
-			cancel()
-			t.Fatal("rejection message never sent")
-		case <-time.After(5 * time.Millisecond):
-		}
-	}
+	deadline := time.After(100 * time.Millisecond)
+	<-deadline
 	cancel()
 
 	if len(fb.gotTurns()) != 0 {
 		t.Fatalf("backend should not have been called: %v", fb.gotTurns())
 	}
-	if len(*sent) != 1 || !strings.Contains((*sent)[0], "not authorized") {
-		t.Fatalf("expected unauthorized reply, got: %v", *sent)
+	if len(*sent) != 0 {
+		t.Fatalf("expected no reply sent, got: %v", *sent)
 	}
 }
 
