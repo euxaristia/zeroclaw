@@ -70,6 +70,6 @@ func NewDriver(backend string) (Driver, error) {
 	case "cairn", "cairn-code":
 		return CairnDriver{}, nil
 	default:
-		return nil, fmt.Errorf("unknown execution backend: %q (supported: zero, cairn-code)", backend)
+		return nil, fmt.Errorf("unknown execution backend: %q (supported: zero, cairn, cairn-code)", backend)
 	}
 }

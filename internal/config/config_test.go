@@ -140,13 +140,23 @@ func TestLoadInvalidJSON(t *testing.T) {
 }
 
 func TestLoadBackendEnv(t *testing.T) {
-	_ = withTempHome(t)
+	tmp := withTempHome(t)
+
+	// Write an existing config.json with backend "zero"
+	p := filepath.Join(tmp, ".zeroclaw", "config.json")
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte(`{"backend":"zero"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
 	t.Setenv("ZEROCLAW_BACKEND", "cairn-code")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 	if cfg.Backend != "cairn-code" {
-		t.Errorf("Backend = %q, want cairn-code", cfg.Backend)
+		t.Errorf("Backend = %q, want cairn-code (env override)", cfg.Backend)
 	}
 }
