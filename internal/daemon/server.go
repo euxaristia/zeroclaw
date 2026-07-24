@@ -88,8 +88,12 @@ func RunServer() error {
 	for _, id := range cfg.Telegram.AllowedChats {
 		allowed[id] = true
 	}
+	driver, err := agent.NewDriver(cfg.Backend)
+	if err != nil {
+		return err
+	}
 	s := &server{
-		driver:       agent.ZeroDriver{},
+		driver:       driver,
 		sessions:     sessions,
 		token:        hex.EncodeToString(tokenBytes),
 		allowedChats: allowed,

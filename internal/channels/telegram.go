@@ -190,12 +190,12 @@ func (c *Channel) handleUpdate(ctx context.Context, up update) {
 		return
 	}
 
-	switch {
-	case text == "/new":
+	switch text {
+	case "/new":
 		c.backend.DeleteConversation("telegram-" + chatID)
 		c.send(ctx, chatID, "Conversation reset. Starting fresh.")
 		return
-	case text == "/ping":
+	case "/ping":
 		c.send(ctx, chatID, "pong")
 		return
 	}

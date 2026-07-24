@@ -287,13 +287,19 @@ func Doctor(w io.Writer) error {
 	check("container "+Container+" running", running, "zeroclaw up")
 	if running {
 		out, err := docker("exec", Container, "zero", "--version")
-		check("zero inside container ("+strings.TrimSpace(out)+")", err == nil, "")
+		check("zero inside container ("+strings.TrimSpace(out)+")", err == nil, "zero binary inside container")
+		if cairnOut, cairnErr := docker("exec", Container, "cairn-code", "--version"); cairnErr == nil {
+			check("cairn-code inside container ("+strings.TrimSpace(cairnOut)+")", true, "")
+		}
 		check("zero credentials adopted", dockerOK("exec", Container, "test", "-e", Home+"/.config/zero/credentials.enc"), "zeroclaw up copies them from the host zero config")
 	}
 	dir, err := envDir()
 	check("env build context", err == nil, "run from the zeroclaw repo")
 	if err == nil {
 		check("env/bin/zero (linux build)", fileExists(filepath.Join(dir, "bin", "zero")), "cross-compile zero for linux/amd64")
+		if fileExists(filepath.Join(dir, "bin", "cairn-code")) {
+			check("env/bin/cairn-code (linux build)", true, "")
+		}
 	}
 	fmt.Fprintln(w, "note: running without hard isolation is not supported yet; docker is required (tier 3 fallback is an M4 item)")
 	return nil
