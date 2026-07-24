@@ -138,3 +138,15 @@ func TestLoadInvalidJSON(t *testing.T) {
 		t.Error("Load returned nil error for invalid json, want error")
 	}
 }
+
+func TestLoadBackendEnv(t *testing.T) {
+	_ = withTempHome(t)
+	t.Setenv("ZEROCLAW_BACKEND", "cairn-code")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Backend != "cairn-code" {
+		t.Errorf("Backend = %q, want cairn-code", cfg.Backend)
+	}
+}
