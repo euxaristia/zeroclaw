@@ -3,7 +3,10 @@
 // zero (flags, stream-JSON, session semantics) stays inside zerodriver.go.
 package agent
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 // Event is the driver-neutral projection of a backend progress event. Field
 // names follow zero's stream-JSON schema v2 because it is the first backend,
@@ -56,4 +59,17 @@ type TurnResult struct {
 
 type Driver interface {
 	Turn(ctx context.Context, opts TurnOptions, onEvent func(Event)) (TurnResult, error)
+}
+
+// NewDriver constructs the execution driver for the requested backend.
+// Supported backends: "zero" (default when empty), "cairn", or "cairn-code".
+func NewDriver(backend string) (Driver, error) {
+	switch backend {
+	case "", "zero":
+		return ZeroDriver{}, nil
+	case "cairn", "cairn-code":
+		return CairnDriver{}, nil
+	default:
+		return nil, fmt.Errorf("unknown execution backend: %q (supported: zero, cairn-code)", backend)
+	}
 }

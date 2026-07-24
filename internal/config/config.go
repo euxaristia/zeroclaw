@@ -18,6 +18,8 @@ type Schedule struct {
 }
 
 type Config struct {
+	// Backend selects the execution backend ("zero" [default], "cairn", or "cairn-code").
+	Backend string `json:"backend,omitempty"`
 	// HeartbeatEvery is a Go duration string; empty or "off" disables the
 	// heartbeat.
 	HeartbeatEvery string     `json:"heartbeatEvery"`

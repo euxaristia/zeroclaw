@@ -36,8 +36,10 @@ RUN curl -fsSL https://sh.rustup.rs \
 
 ENV PATH=/usr/local/go/bin:/usr/local/cargo/bin:$PATH
 
-COPY bin/zero /usr/local/bin/zero
-RUN chmod 0755 /usr/local/bin/zero
+COPY bin/ /tmp/bin/
+RUN cp /tmp/bin/* /usr/local/bin/ 2>/dev/null || true \
+ && chmod 0755 /usr/local/bin/* 2>/dev/null || true \
+ && rm -rf /tmp/bin
 
 COPY bootstrap/ /opt/zeroclaw/bootstrap/
 
