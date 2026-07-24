@@ -53,9 +53,9 @@ func (f *fakeBackend) gotTurns() []string {
 
 // botServer is a minimal fake Telegram Bot API. It returns the queued updates
 // once, then 200/empty for subsequent polls. sendMessage records replies.
-func botServer(t *testing.T, updates []update) (*httptest.Server, *[]string) {
+func botServer(t *testing.T, updates []update) (*httptest.Server, func() []string, func() bool) {
 	t.Helper()
-	sent := &[]string{}
+	var sent []string
 	var mu sync.Mutex
 	pending := updates
 	served := false
@@ -78,7 +78,7 @@ func botServer(t *testing.T, updates []update) (*httptest.Server, *[]string) {
 				return
 			}
 			mu.Lock()
-			*sent = append(*sent, req.Text)
+			sent = append(sent, req.Text)
 			mu.Unlock()
 			json.NewEncoder(w).Encode(sendMessageResponse{OK: true})
 		default:
@@ -86,7 +86,20 @@ func botServer(t *testing.T, updates []update) (*httptest.Server, *[]string) {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	return srv, sent
+
+	getSent := func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]string(nil), sent...)
+	}
+
+	wasServed := func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return served
+	}
+
+	return srv, getSent, wasServed
 }
 
 func newTestChannel(baseURL string, fb Backend) *Channel {
@@ -108,7 +121,7 @@ func mkUpdate(id int64, text string) update {
 
 func TestChannelDeliversTurn(t *testing.T) {
 	fb := &fakeBackend{allowed: map[string]bool{"123": true}, reply: "hello from agent"}
-	srv, sent := botServer(t, []update{mkUpdate(123, "ping me")})
+	srv, getSent, _ := botServer(t, []update{mkUpdate(123, "ping me")})
 
 	ch := newTestChannel(srv.URL, fb)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -131,34 +144,41 @@ func TestChannelDeliversTurn(t *testing.T) {
 	if got := fb.gotTurns(); len(got) != 1 || got[0] != "ping me" {
 		t.Fatalf("unexpected turns: %v", got)
 	}
-	if len(*sent) != 1 || (*sent)[0] != "hello from agent" {
-		t.Fatalf("unexpected replies sent: %v", *sent)
+	if sent := getSent(); len(sent) != 1 || sent[0] != "hello from agent" {
+		t.Fatalf("unexpected replies sent: %v", sent)
 	}
 }
 
 func TestChannelRejectsUnknownChat(t *testing.T) {
 	fb := &fakeBackend{allowed: map[string]bool{"999": true}}
-	srv, sent := botServer(t, []update{mkUpdate(123, "intruder")})
+	srv, getSent, wasServed := botServer(t, []update{mkUpdate(123, "intruder")})
 
 	ch := newTestChannel(srv.URL, fb)
 	ctx, cancel := context.WithCancel(context.Background())
 	go ch.Run(ctx)
 
-	deadline := time.After(100 * time.Millisecond)
-	<-deadline
+	deadline := time.After(2 * time.Second)
+	for !wasServed() {
+		select {
+		case <-deadline:
+			cancel()
+			t.Fatal("botServer updates were never polled")
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
 	cancel()
 
 	if len(fb.gotTurns()) != 0 {
 		t.Fatalf("backend should not have been called: %v", fb.gotTurns())
 	}
-	if len(*sent) != 0 {
-		t.Fatalf("expected no reply sent, got: %v", *sent)
+	if sent := getSent(); len(sent) != 0 {
+		t.Fatalf("expected no reply sent, got: %v", sent)
 	}
 }
 
 func TestChannelResetCommand(t *testing.T) {
 	fb := &fakeBackend{allowed: map[string]bool{"123": true}}
-	srv, _ := botServer(t, []update{mkUpdate(123, "/new")})
+	srv, _, _ := botServer(t, []update{mkUpdate(123, "/new")})
 
 	ch := newTestChannel(srv.URL, fb)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -188,7 +208,7 @@ func TestChannelResetCommand(t *testing.T) {
 
 func TestChannelReportsTurnError(t *testing.T) {
 	fb := &fakeBackend{allowed: map[string]bool{"123": true}, turnErr: fmt.Errorf("boom")}
-	srv, sent := botServer(t, []update{mkUpdate(123, "break it")})
+	srv, getSent, _ := botServer(t, []update{mkUpdate(123, "break it")})
 
 	ch := newTestChannel(srv.URL, fb)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -196,7 +216,7 @@ func TestChannelReportsTurnError(t *testing.T) {
 
 	deadline := time.After(2 * time.Second)
 	for {
-		if len(*sent) > 0 {
+		if len(getSent()) > 0 {
 			break
 		}
 		select {
@@ -208,11 +228,12 @@ func TestChannelReportsTurnError(t *testing.T) {
 	}
 	cancel()
 
-	if len(*sent) != 1 || !strings.Contains((*sent)[0], "turn failed") {
-		t.Fatalf("expected turn-failed reply, got: %v", *sent)
+	sent := getSent()
+	if len(sent) != 1 || !strings.Contains(sent[0], "turn failed") {
+		t.Fatalf("expected turn-failed reply, got: %v", sent)
 	}
-	if strings.Contains((*sent)[0], "boom") {
-		t.Fatalf("reply leaked raw error detail: %v", *sent)
+	if strings.Contains(sent[0], "boom") {
+		t.Fatalf("reply leaked raw error detail: %v", sent)
 	}
 }
 
