@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -214,6 +215,14 @@ func Take(containerPath, hostDest string) error {
 	if !strings.HasPrefix(containerPath, "/") {
 		containerPath = Home + "/" + containerPath
 	}
+
+	// Prevent path traversal outside the agent's home directory.
+	cleanPath := path.Clean(containerPath)
+	if cleanPath != Home && !strings.HasPrefix(cleanPath, Home+"/") {
+		return fmt.Errorf("path traversal: access denied to %s", containerPath)
+	}
+	containerPath = cleanPath
+
 	if hostDest == "" {
 		hostDest = "."
 	}

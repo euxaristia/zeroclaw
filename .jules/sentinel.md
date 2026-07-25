@@ -30,3 +30,8 @@
 **Vulnerability:** The Telegram channel handler `handleUpdate` actively replied to unauthorized chats with a "not authorized" message. Attackers could spam the bot with messages from unauthorized chats, causing the bot to send countless rejection replies, quickly exhausting Telegram's API rate limits and causing a Denial of Service (DoS) for legitimate users.
 **Learning:** Replying to unauthorized requests on a rate-limited external platform gives attackers a free way to burn your API quota. Security rejections should fail silently to the attacker while logging internally.
 **Prevention:** When handling requests from rate-limited third-party platforms (e.g., Telegram), silently drop and log unauthorized requests rather than actively replying to them. This prevents attackers from exploiting the bot to exhaust its API rate limits and cause a Denial of Service (DoS).
+
+## 2025-08-14 - Path Traversal in File Download (Docker CP)
+**Vulnerability:** The `env.Take` function allowed users to specify arbitrary relative paths (e.g., `../../../../etc/passwd`) or absolute paths (`/etc/passwd`). Because this path was directly passed to `docker cp Container:<path>`, it allowed an attacker to read any file from the container's filesystem, escaping the intended `/home/zeroclaw` sandbox.
+**Learning:** Even when delegating file operations to external tools like Docker, any user-supplied path component must be strictly normalized and validated against the intended base directory.
+**Prevention:** Use `path.Clean()` on the user-provided path and verify that the resulting path string either equals the intended base directory or strictly begins with `<base_dir>/`.
