@@ -202,6 +202,11 @@ func (s *server) DeleteConversation(conversation string) error {
 
 func (s *server) auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Add standard security headers to all responses
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Content-Security-Policy", "default-src 'none'")
+
 		auth := r.Header.Get("Authorization")
 		expected := "Bearer " + s.token
 
