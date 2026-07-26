@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -214,13 +215,22 @@ func Take(containerPath, hostDest string) error {
 	if !strings.HasPrefix(containerPath, "/") {
 		containerPath = Home + "/" + containerPath
 	}
+
+	// Prevent path traversal out of the agent's home directory.
+	// Since containerPath describes a location inside the Linux container,
+	// we use path.Clean rather than filepath.Clean.
+	cleanPath := path.Clean(containerPath)
+	if cleanPath != Home && !strings.HasPrefix(cleanPath, Home+"/") {
+		return fmt.Errorf("access denied: path %s is outside the agent home", containerPath)
+	}
+
 	if hostDest == "" {
 		hostDest = "."
 	}
-	if _, err := docker("cp", Container+":"+containerPath, hostDest); err != nil {
+	if _, err := docker("cp", Container+":"+cleanPath, hostDest); err != nil {
 		return err
 	}
-	fmt.Println("took", containerPath, "->", hostDest)
+	fmt.Println("took", cleanPath, "->", hostDest)
 	return nil
 }
 
