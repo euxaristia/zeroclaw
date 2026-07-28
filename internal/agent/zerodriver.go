@@ -116,7 +116,10 @@ func (ZeroDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Event
 		}
 	}
 	if err := sc.Err(); err != nil {
-		cmd.Wait()
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+		_ = cmd.Wait()
 		return res, fmt.Errorf("reading zero events: %w", err)
 	}
 	if err := cmd.Wait(); err != nil && res.Status == "" {

@@ -128,11 +128,11 @@ func TestChannelDeliversTurn(t *testing.T) {
 	go ch.Run(ctx)
 
 	deadline := time.After(2 * time.Second)
-	for len(fb.gotTurns()) == 0 {
+	for len(fb.gotTurns()) == 0 || len(getSent()) == 0 {
 		select {
 		case <-deadline:
 			cancel()
-			t.Fatal("backend never received a turn")
+			t.Fatal("backend never received a turn or reply was not sent")
 		case <-time.After(5 * time.Millisecond):
 		}
 	}
