@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -211,16 +212,24 @@ func Give(hostPath string) error {
 // Take copies a file or directory out of the agent's home to a host path.
 // Relative container paths are resolved against the agent home.
 func Take(containerPath, hostDest string) error {
-	if !strings.HasPrefix(containerPath, "/") {
-		containerPath = Home + "/" + containerPath
+	cleaned := containerPath
+	if !path.IsAbs(cleaned) {
+		cleaned = path.Join(Home, cleaned)
+	} else {
+		cleaned = path.Clean(cleaned)
 	}
+
+	if !strings.HasPrefix(cleaned, Home+"/") && cleaned != Home {
+		return fmt.Errorf("path traversal denied: %s is outside agent home", containerPath)
+	}
+
 	if hostDest == "" {
 		hostDest = "."
 	}
-	if _, err := docker("cp", Container+":"+containerPath, hostDest); err != nil {
+	if _, err := docker("cp", Container+":"+cleaned, hostDest); err != nil {
 		return err
 	}
-	fmt.Println("took", containerPath, "->", hostDest)
+	fmt.Println("took", cleaned, "->", hostDest)
 	return nil
 }
 
