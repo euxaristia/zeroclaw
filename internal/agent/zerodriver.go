@@ -38,7 +38,7 @@ func (ZeroDriver) Doctor(container string) HealthResult {
 	return HealthResult{
 		Name: "zero inside container",
 		OK:   false,
-		Hint: "zero binary inside container",
+		Hint: "zero binary missing or unavailable inside container",
 	}
 }
 

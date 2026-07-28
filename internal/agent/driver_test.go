@@ -54,6 +54,9 @@ func TestDoctor(t *testing.T) {
 	if results[1].OK {
 		t.Errorf("CairnDriver.Doctor() returned OK=true for non-existent container")
 	}
+	if results[0].Hint == "" {
+		t.Errorf("ZeroDriver.Doctor() returned empty hint on failure")
+	}
 	if results[1].Hint == "" {
 		t.Errorf("CairnDriver.Doctor() returned empty hint on failure")
 	}
