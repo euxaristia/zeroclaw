@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"zeroclaw/internal/env"
 )
@@ -19,7 +20,9 @@ type CairnDriver struct{}
 var _ Driver = CairnDriver{}
 
 func (CairnDriver) Doctor(container string) HealthResult {
-	cmd := env.DockerCommandContext(context.Background(), "exec", container, "cairn-code", "--version")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := env.DockerCommandContext(ctx, "exec", container, "cairn-code", "--version")
 	out, err := cmd.CombinedOutput()
 	ver := strings.TrimSpace(string(out))
 	if err == nil {

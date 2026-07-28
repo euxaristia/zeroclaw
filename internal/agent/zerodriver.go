@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"zeroclaw/internal/env"
 )
@@ -23,7 +24,9 @@ type ZeroDriver struct{}
 var _ Driver = ZeroDriver{}
 
 func (ZeroDriver) Doctor(container string) HealthResult {
-	cmd := env.DockerCommandContext(context.Background(), "exec", container, "zero", "--version")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := env.DockerCommandContext(ctx, "exec", container, "zero", "--version")
 	out, err := cmd.CombinedOutput()
 	ver := strings.TrimSpace(string(out))
 	if err == nil {
