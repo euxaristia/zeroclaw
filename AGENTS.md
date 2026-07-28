@@ -228,6 +228,7 @@ are done and shipped. Remaining hardening items, none started:
 - Minimal deps, early returns, no em dashes in any authored text. Go idioms over
   the TS style rules in the global CLAUDE.md.
 - No git actions of any kind without explicit consent.
+- Always use raw file input (e.g. `write_to_file` to a temporary file + `--body-file`) for PR/issue descriptions and multi-line commands to prevent PowerShell backtick and backslash mangling.
 - Verify before committing: `go build ./... && go vet ./... && go test ./...`
   must pass, and changed files must be gofmt-clean. Also run the pinned
   golangci-lint and govulncheck commands from README.md's Development section

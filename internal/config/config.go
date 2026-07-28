@@ -18,6 +18,8 @@ type Schedule struct {
 }
 
 type Config struct {
+	// Backend selects the execution backend ("zero" [default], "cairn", or "cairn-code").
+	Backend string `json:"backend,omitempty"`
 	// HeartbeatEvery is a Go duration string; empty or "off" disables the
 	// heartbeat.
 	HeartbeatEvery string     `json:"heartbeatEvery"`
@@ -53,7 +55,11 @@ func Load() (Config, error) {
 		if werr := os.WriteFile(p, out, 0o600); werr != nil {
 			return Config{}, werr
 		}
-		return defaultConfig, nil
+		cfg := defaultConfig
+		if envBackend := os.Getenv("ZEROCLAW_BACKEND"); envBackend != "" {
+			cfg.Backend = envBackend
+		}
+		return cfg, nil
 	}
 	if err != nil {
 		return Config{}, err
@@ -61,6 +67,9 @@ func Load() (Config, error) {
 	var cfg Config
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return Config{}, fmt.Errorf("parsing %s: %w", p, err)
+	}
+	if envBackend := os.Getenv("ZEROCLAW_BACKEND"); envBackend != "" {
+		cfg.Backend = envBackend
 	}
 	return cfg, nil
 }

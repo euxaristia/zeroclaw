@@ -13,38 +13,34 @@ import (
 	"zeroclaw/internal/env"
 )
 
-// The agent's workspace root is its whole home: memory, skills, and projects
-// are all inside its world, and the container is the boundary around it.
-const workspace = env.Home
+// CairnDriver runs turns through `cairn-code exec` inside the zeroclaw container,
+// speaking stream-JSON schema v2.
+type CairnDriver struct{}
 
-// ZeroDriver runs turns through `zero exec` inside the zeroclaw container,
-// speaking stream-JSON schema v2 (see zero's docs/STREAM_JSON_PROTOCOL.md).
-type ZeroDriver struct{}
+var _ Driver = CairnDriver{}
 
-var _ Driver = ZeroDriver{}
-
-func (ZeroDriver) Doctor(container string) HealthResult {
+func (CairnDriver) Doctor(container string) HealthResult {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	cmd := env.DockerCommandContext(ctx, "exec", container, "zero", "--version")
+	cmd := env.DockerCommandContext(ctx, "exec", container, "cairn-code", "--version")
 	out, err := cmd.CombinedOutput()
 	ver := strings.TrimSpace(string(out))
 	if err == nil {
 		return HealthResult{
-			Name: "zero inside container (" + ver + ")",
+			Name: "cairn-code inside container (" + ver + ")",
 			OK:   true,
 		}
 	}
 	return HealthResult{
-		Name: "zero inside container",
+		Name: "cairn-code inside container",
 		OK:   false,
-		Hint: "zero binary missing or unavailable inside container",
+		Hint: "cairn-code binary missing or unavailable",
 	}
 }
 
-func (ZeroDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Event)) (TurnResult, error) {
+func (CairnDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Event)) (TurnResult, error) {
 	args := []string{
-		"exec", "-i", env.Container, "zero", "exec",
+		"exec", "-i", env.Container, "cairn-code", "exec",
 		"--input-format", "stream-json",
 		"--output-format", "stream-json",
 		"-C", workspace,
@@ -73,7 +69,7 @@ func (ZeroDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Event
 		return TurnResult{}, err
 	}
 	if err := cmd.Start(); err != nil {
-		return TurnResult{}, fmt.Errorf("starting zero exec in container: %w", err)
+		return TurnResult{}, fmt.Errorf("starting cairn-code exec in container: %w", err)
 	}
 
 	input, err := json.Marshal(map[string]any{
@@ -86,9 +82,14 @@ func (ZeroDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Event
 		return TurnResult{}, err
 	}
 	if _, err := stdin.Write(append(input, '\n')); err != nil {
+		_ = stdin.Close()
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+		_ = cmd.Wait()
 		return TurnResult{}, fmt.Errorf("writing input event: %w", err)
 	}
-	stdin.Close()
+	_ = stdin.Close()
 
 	res := TurnResult{ExitCode: -1}
 	sc := bufio.NewScanner(stdout)
@@ -120,13 +121,13 @@ func (ZeroDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Event
 			_ = cmd.Process.Kill()
 		}
 		_ = cmd.Wait()
-		return res, fmt.Errorf("reading zero events: %w", err)
+		return res, fmt.Errorf("reading cairn-code events: %w", err)
 	}
 	if err := cmd.Wait(); err != nil && res.Status == "" {
-		return res, fmt.Errorf("zero exec failed before run_end: %w", err)
+		return res, fmt.Errorf("cairn-code exec failed before run_end: %w", err)
 	}
 	if res.Status == "" {
-		return res, fmt.Errorf("zero exec ended without a run_end event")
+		return res, fmt.Errorf("cairn-code exec ended without a run_end event")
 	}
 	return res, nil
 }
