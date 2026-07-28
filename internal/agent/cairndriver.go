@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"zeroclaw/internal/env"
 )
@@ -16,6 +17,23 @@ import (
 type CairnDriver struct{}
 
 var _ Driver = CairnDriver{}
+
+func (CairnDriver) Doctor(container string) HealthResult {
+	cmd := env.DockerCommandContext(context.Background(), "exec", container, "cairn-code", "--version")
+	out, err := cmd.CombinedOutput()
+	ver := strings.TrimSpace(string(out))
+	if err == nil {
+		return HealthResult{
+			Name: "cairn-code inside container (" + ver + ")",
+			OK:   true,
+		}
+	}
+	return HealthResult{
+		Name: "cairn-code inside container",
+		OK:   false,
+		Hint: "cairn-code binary missing or unavailable",
+	}
+}
 
 func (CairnDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Event)) (TurnResult, error) {
 	args := []string{

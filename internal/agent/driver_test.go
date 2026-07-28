@@ -42,3 +42,19 @@ func TestNewDriver(t *testing.T) {
 		}
 	}
 }
+
+func TestDoctor(t *testing.T) {
+	results := Doctor("nonexistent-container")
+	if len(results) != 2 {
+		t.Fatalf("Doctor() returned %d results, want 2", len(results))
+	}
+	if results[0].OK {
+		t.Errorf("ZeroDriver.Doctor() returned OK=true for non-existent container")
+	}
+	if results[1].OK {
+		t.Errorf("CairnDriver.Doctor() returned OK=true for non-existent container")
+	}
+	if results[1].Hint == "" {
+		t.Errorf("CairnDriver.Doctor() returned empty hint on failure")
+	}
+}

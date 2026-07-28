@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"zeroclaw/internal/env"
 )
@@ -20,6 +21,23 @@ const workspace = env.Home
 type ZeroDriver struct{}
 
 var _ Driver = ZeroDriver{}
+
+func (ZeroDriver) Doctor(container string) HealthResult {
+	cmd := env.DockerCommandContext(context.Background(), "exec", container, "zero", "--version")
+	out, err := cmd.CombinedOutput()
+	ver := strings.TrimSpace(string(out))
+	if err == nil {
+		return HealthResult{
+			Name: "zero inside container (" + ver + ")",
+			OK:   true,
+		}
+	}
+	return HealthResult{
+		Name: "zero inside container",
+		OK:   false,
+		Hint: "zero binary inside container",
+	}
+}
 
 func (ZeroDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Event)) (TurnResult, error) {
 	args := []string{

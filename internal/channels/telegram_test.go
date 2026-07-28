@@ -128,10 +128,7 @@ func TestChannelDeliversTurn(t *testing.T) {
 	go ch.Run(ctx)
 
 	deadline := time.After(2 * time.Second)
-	for {
-		if len(fb.gotTurns()) > 0 {
-			break
-		}
+	for len(fb.gotTurns()) == 0 {
 		select {
 		case <-deadline:
 			cancel()
@@ -215,10 +212,7 @@ func TestChannelReportsTurnError(t *testing.T) {
 	go ch.Run(ctx)
 
 	deadline := time.After(2 * time.Second)
-	for {
-		if len(getSent()) > 0 {
-			break
-		}
+	for len(getSent()) == 0 {
 		select {
 		case <-deadline:
 			cancel()
