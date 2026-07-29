@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -227,9 +228,14 @@ func Give(hostPath string) error {
 // Take copies a file or directory out of the agent's home to a host path.
 // Relative container paths are resolved against the agent home.
 func Take(containerPath, hostDest string) error {
-	if !strings.HasPrefix(containerPath, "/") {
-		containerPath = Home + "/" + containerPath
+	if !path.IsAbs(containerPath) {
+		containerPath = path.Join(Home, containerPath)
 	}
+	containerPath = path.Clean(containerPath)
+	if !strings.HasPrefix(containerPath, Home+"/") && containerPath != Home {
+		return fmt.Errorf("access denied: path escapes home directory")
+	}
+
 	if hostDest == "" {
 		hostDest = "."
 	}
