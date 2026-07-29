@@ -6,12 +6,15 @@
 package env
 
 import (
+	"archive/tar"
+	"bytes"
 	"context"
 	"debug/elf"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -224,20 +227,175 @@ func Give(hostPath string) error {
 	return nil
 }
 
+// sanitizeContainerPath resolves a user-supplied container path against Home
+// and rejects any path that would escape it. path.Clean strips a trailing
+// "/.", which docker cp treats specially (copy the directory's contents
+// rather than the directory itself), so that marker is preserved separately.
+func sanitizeContainerPath(containerPath string) (string, error) {
+	trailingDot := containerPath == "." || strings.HasSuffix(containerPath, "/.")
+	clean := containerPath
+	if !path.IsAbs(clean) {
+		clean = path.Join(Home, clean)
+	} else {
+		clean = path.Clean(clean)
+	}
+	if clean != Home && !strings.HasPrefix(clean, Home+"/") {
+		return "", fmt.Errorf("path traversal denied: %s is outside agent home", containerPath)
+	}
+	if trailingDot {
+		clean += "/."
+	}
+	return clean, nil
+}
+
+// takeScript resolves $1 to its real, symlink-free path inside the
+// container, rejects it unless it is $2 (Home) or under it, then streams a
+// tar of either the resolved path's contents ($3 == "1", docker cp's "copy
+// directory contents" form) or the resolved path itself. Resolving and
+// reading happen in this one process so a symlink cannot be swapped in
+// between a separate check and a separate copy.
+const takeScript = `p=$(readlink -f "$1") || exit 1
+case "$p" in
+  "$2"|"$2"/*) ;;
+  *) exit 91 ;;
+esac
+if [ "$3" = "1" ]; then
+  exec tar -cf - -C "$p" .
+else
+  exec tar -cf - -C "$(dirname "$p")" "$(basename "$p")"
+fi`
+
+// exitCodeTraversalDenied is takeScript's exit status for a resolved path
+// outside Home. Chosen to not collide with tar's or sh's own exit codes
+// (both commonly exit 1 or 2 on failure), so a real tar/readlink error is
+// never misreported as a traversal denial.
+const exitCodeTraversalDenied = 91
+
 // Take copies a file or directory out of the agent's home to a host path.
 // Relative container paths are resolved against the agent home.
 func Take(containerPath, hostDest string) error {
-	if !strings.HasPrefix(containerPath, "/") {
-		containerPath = Home + "/" + containerPath
+	clean, err := sanitizeContainerPath(containerPath)
+	if err != nil {
+		return err
 	}
 	if hostDest == "" {
 		hostDest = "."
 	}
-	if _, err := docker("cp", Container+":"+containerPath, hostDest); err != nil {
+	contentsOnly := "0"
+	src := clean
+	if strings.HasSuffix(clean, "/.") {
+		contentsOnly = "1"
+		src = strings.TrimSuffix(clean, "/.")
+	}
+
+	cmd := DockerCommandContext(context.Background(), "exec", Container, "sh", "-c", takeScript, "sh", src, Home, contentsOnly)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
 		return err
 	}
-	fmt.Println("took", containerPath, "->", hostDest)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		_ = stdout.Close()
+		return err
+	}
+	extractErr := extractTar(stdout, hostDest)
+	// tar.Reader stops at the archive's end-of-archive marker, short of the
+	// writer's block padding. Drain the rest so docker exec's write doesn't
+	// block on a full pipe and leave cmd.Wait hanging forever.
+	_, _ = io.Copy(io.Discard, stdout)
+	if waitErr := cmd.Wait(); waitErr != nil {
+		if cmd.ProcessState.ExitCode() == exitCodeTraversalDenied {
+			return fmt.Errorf("path traversal denied: %s resolves outside agent home", containerPath)
+		}
+		return fmt.Errorf("docker exec: %w\n%s", waitErr, strings.TrimSpace(stderr.String()))
+	}
+	if extractErr != nil {
+		return fmt.Errorf("extracting %s: %w", containerPath, extractErr)
+	}
+	fmt.Println("took", clean, "->", hostDest)
 	return nil
+}
+
+// extractTar writes a tar stream into destDir, creating it if necessary. The
+// container is not fully trusted, so every entry name and symlink target is
+// checked to stay within destDir before touching the filesystem; a crafted
+// ".." entry or a symlink planted ahead of a same-named file could otherwise
+// write outside the requested destination.
+func extractTar(r io.Reader, destDir string) error {
+	destDir, err := filepath.Abs(destDir)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		return err
+	}
+	tr := tar.NewReader(r)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		target, err := safeJoin(destDir, hdr.Name)
+		if err != nil {
+			return err
+		}
+		switch hdr.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(target, os.FileMode(hdr.Mode)); err != nil {
+				return err
+			}
+		case tar.TypeSymlink:
+			if _, err := safeJoin(filepath.Dir(target), hdr.Linkname); err != nil {
+				return fmt.Errorf("tar entry %q: symlink target %q escapes destination: %w", hdr.Name, hdr.Linkname, err)
+			}
+			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+				return err
+			}
+			_ = os.Remove(target) // don't follow a pre-existing entry at this path
+			if err := os.Symlink(hdr.Linkname, target); err != nil {
+				return err
+			}
+		case tar.TypeLink:
+			return fmt.Errorf("tar entry %q: hard links are not supported", hdr.Name)
+		default:
+			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+				return err
+			}
+			_ = os.Remove(target) // don't write through a pre-existing symlink
+			f, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, os.FileMode(hdr.Mode))
+			if err != nil {
+				return err
+			}
+			if _, copyErr := io.Copy(f, tr); copyErr != nil {
+				f.Close()
+				return copyErr
+			}
+			if err := f.Close(); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+// safeJoin joins destDir with a tar-provided relative path (an entry name or
+// a symlink target) and rejects anything that would resolve outside destDir,
+// including an absolute-looking name (tar entries are POSIX-style, so a
+// leading "/" is rejected directly rather than trusting the host OS's own
+// notion of absolute).
+func safeJoin(destDir, name string) (string, error) {
+	if path.IsAbs(filepath.ToSlash(name)) {
+		return "", fmt.Errorf("%q is an absolute path", name)
+	}
+	joined := filepath.Join(destDir, filepath.FromSlash(name))
+	rel, err := filepath.Rel(destDir, joined)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("%q escapes destination directory", name)
+	}
+	return joined, nil
 }
 
 func Down() error {
