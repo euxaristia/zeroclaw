@@ -1,6 +1,10 @@
 package env
 
-import "testing"
+import (
+	"path/filepath"
+	"strings"
+	"testing"
+)
 
 func TestSanitizeContainerPath(t *testing.T) {
 	cases := []struct {
@@ -34,6 +38,40 @@ func TestSanitizeContainerPath(t *testing.T) {
 			}
 			if got != c.want {
 				t.Fatalf("sanitizeContainerPath(%q) = %q, want %q", c.in, got, c.want)
+			}
+		})
+	}
+}
+
+func TestSafeJoin(t *testing.T) {
+	destDir := filepath.Join(t.TempDir(), "dest")
+	cases := []struct {
+		name    string
+		in      string
+		wantErr bool
+	}{
+		{"plain file", "a.txt", false},
+		{"nested", "sub/a.txt", false},
+		{"dot prefixed (tar's own convention)", "./a.txt", false},
+		{"traversal", "../escape.txt", true},
+		{"nested traversal", "sub/../../escape.txt", true},
+		{"posix absolute", "/etc/passwd", true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := safeJoin(destDir, c.in)
+			if c.wantErr {
+				if err == nil {
+					t.Fatalf("safeJoin(%q, %q) = %q, want error", destDir, c.in, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("safeJoin(%q, %q) unexpected error: %v", destDir, c.in, err)
+			}
+			rel, relErr := filepath.Rel(destDir, got)
+			if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				t.Fatalf("safeJoin(%q, %q) = %q, escapes destDir", destDir, c.in, got)
 			}
 		})
 	}

@@ -257,13 +257,19 @@ func sanitizeContainerPath(containerPath string) (string, error) {
 const takeScript = `p=$(readlink -f "$1") || exit 1
 case "$p" in
   "$2"|"$2"/*) ;;
-  *) exit 2 ;;
+  *) exit 91 ;;
 esac
 if [ "$3" = "1" ]; then
   exec tar -cf - -C "$p" .
 else
   exec tar -cf - -C "$(dirname "$p")" "$(basename "$p")"
 fi`
+
+// exitCodeTraversalDenied is takeScript's exit status for a resolved path
+// outside Home. Chosen to not collide with tar's or sh's own exit codes
+// (both commonly exit 1 or 2 on failure), so a real tar/readlink error is
+// never misreported as a traversal denial.
+const exitCodeTraversalDenied = 91
 
 // Take copies a file or directory out of the agent's home to a host path.
 // Relative container paths are resolved against the agent home.
@@ -290,6 +296,7 @@ func Take(containerPath, hostDest string) error {
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Start(); err != nil {
+		_ = stdout.Close()
 		return err
 	}
 	extractErr := extractTar(stdout, hostDest)
@@ -298,7 +305,7 @@ func Take(containerPath, hostDest string) error {
 	// block on a full pipe and leave cmd.Wait hanging forever.
 	_, _ = io.Copy(io.Discard, stdout)
 	if waitErr := cmd.Wait(); waitErr != nil {
-		if cmd.ProcessState.ExitCode() == 2 {
+		if cmd.ProcessState.ExitCode() == exitCodeTraversalDenied {
 			return fmt.Errorf("path traversal denied: %s resolves outside agent home", containerPath)
 		}
 		return fmt.Errorf("docker exec: %w\n%s", waitErr, strings.TrimSpace(stderr.String()))
@@ -310,8 +317,16 @@ func Take(containerPath, hostDest string) error {
 	return nil
 }
 
-// extractTar writes a tar stream into destDir, creating it if necessary.
+// extractTar writes a tar stream into destDir, creating it if necessary. The
+// container is not fully trusted, so every entry name and symlink target is
+// checked to stay within destDir before touching the filesystem; a crafted
+// ".." entry or a symlink planted ahead of a same-named file could otherwise
+// write outside the requested destination.
 func extractTar(r io.Reader, destDir string) error {
+	destDir, err := filepath.Abs(destDir)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return err
 	}
@@ -324,22 +339,34 @@ func extractTar(r io.Reader, destDir string) error {
 		if err != nil {
 			return err
 		}
-		target := filepath.Join(destDir, filepath.FromSlash(hdr.Name))
+		target, err := safeJoin(destDir, hdr.Name)
+		if err != nil {
+			return err
+		}
 		switch hdr.Typeflag {
 		case tar.TypeDir:
 			if err := os.MkdirAll(target, os.FileMode(hdr.Mode)); err != nil {
 				return err
 			}
 		case tar.TypeSymlink:
-			_ = os.Remove(target)
+			if _, err := safeJoin(filepath.Dir(target), hdr.Linkname); err != nil {
+				return fmt.Errorf("tar entry %q: symlink target %q escapes destination: %w", hdr.Name, hdr.Linkname, err)
+			}
+			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+				return err
+			}
+			_ = os.Remove(target) // don't follow a pre-existing entry at this path
 			if err := os.Symlink(hdr.Linkname, target); err != nil {
 				return err
 			}
+		case tar.TypeLink:
+			return fmt.Errorf("tar entry %q: hard links are not supported", hdr.Name)
 		default:
 			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 				return err
 			}
-			f, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, os.FileMode(hdr.Mode))
+			_ = os.Remove(target) // don't write through a pre-existing symlink
+			f, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, os.FileMode(hdr.Mode))
 			if err != nil {
 				return err
 			}
@@ -352,6 +379,23 @@ func extractTar(r io.Reader, destDir string) error {
 			}
 		}
 	}
+}
+
+// safeJoin joins destDir with a tar-provided relative path (an entry name or
+// a symlink target) and rejects anything that would resolve outside destDir,
+// including an absolute-looking name (tar entries are POSIX-style, so a
+// leading "/" is rejected directly rather than trusting the host OS's own
+// notion of absolute).
+func safeJoin(destDir, name string) (string, error) {
+	if path.IsAbs(filepath.ToSlash(name)) {
+		return "", fmt.Errorf("%q is an absolute path", name)
+	}
+	joined := filepath.Join(destDir, filepath.FromSlash(name))
+	rel, err := filepath.Rel(destDir, joined)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("%q escapes destination directory", name)
+	}
+	return joined, nil
 }
 
 func Down() error {
