@@ -6,6 +6,8 @@
 package env
 
 import (
+	"archive/tar"
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -230,6 +232,23 @@ func sanitizeContainerPath(containerPath string) (string, error) {
 	return clean, nil
 }
 
+// takeScript resolves $1 to its real, symlink-free path inside the
+// container, rejects it unless it is $2 (Home) or under it, then streams a
+// tar of either the resolved path's contents ($3 == "1", docker cp's "copy
+// directory contents" form) or the resolved path itself. Resolving and
+// reading happen in this one process so a symlink cannot be swapped in
+// between a separate check and a separate copy.
+const takeScript = `p=$(readlink -f "$1") || exit 1
+case "$p" in
+  "$2"|"$2"/*) ;;
+  *) exit 2 ;;
+esac
+if [ "$3" = "1" ]; then
+  exec tar -cf - -C "$p" .
+else
+  exec tar -cf - -C "$(dirname "$p")" "$(basename "$p")"
+fi`
+
 // Take copies a file or directory out of the agent's home to a host path.
 // Relative container paths are resolved against the agent home.
 func Take(containerPath, hostDest string) error {
@@ -237,24 +256,86 @@ func Take(containerPath, hostDest string) error {
 	if err != nil {
 		return err
 	}
-	// sanitizeContainerPath only checks the string form of the path. A
-	// symlink inside the container could still point outside Home, so the
-	// in-container real path is resolved and checked before the copy.
-	real, err := docker("exec", Container, "readlink", "-f", strings.TrimSuffix(clean, "/."))
-	if err != nil {
-		return fmt.Errorf("resolving %s in container: %w", containerPath, err)
-	}
-	if real != Home && !strings.HasPrefix(real, Home+"/") {
-		return fmt.Errorf("path traversal denied: %s resolves to %s outside agent home", containerPath, real)
-	}
 	if hostDest == "" {
 		hostDest = "."
 	}
-	if _, err := docker("cp", Container+":"+clean, hostDest); err != nil {
+	contentsOnly := "0"
+	src := clean
+	if strings.HasSuffix(clean, "/.") {
+		contentsOnly = "1"
+		src = strings.TrimSuffix(clean, "/.")
+	}
+
+	cmd := DockerCommandContext(context.Background(), "exec", Container, "sh", "-c", takeScript, "sh", src, Home, contentsOnly)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
 		return err
+	}
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	extractErr := extractTar(stdout, hostDest)
+	// tar.Reader stops at the archive's end-of-archive marker, short of the
+	// writer's block padding. Drain the rest so docker exec's write doesn't
+	// block on a full pipe and leave cmd.Wait hanging forever.
+	_, _ = io.Copy(io.Discard, stdout)
+	if waitErr := cmd.Wait(); waitErr != nil {
+		if cmd.ProcessState.ExitCode() == 2 {
+			return fmt.Errorf("path traversal denied: %s resolves outside agent home", containerPath)
+		}
+		return fmt.Errorf("docker exec: %w\n%s", waitErr, strings.TrimSpace(stderr.String()))
+	}
+	if extractErr != nil {
+		return fmt.Errorf("extracting %s: %w", containerPath, extractErr)
 	}
 	fmt.Println("took", clean, "->", hostDest)
 	return nil
+}
+
+// extractTar writes a tar stream into destDir, creating it if necessary.
+func extractTar(r io.Reader, destDir string) error {
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		return err
+	}
+	tr := tar.NewReader(r)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(destDir, filepath.FromSlash(hdr.Name))
+		switch hdr.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(target, os.FileMode(hdr.Mode)); err != nil {
+				return err
+			}
+		case tar.TypeSymlink:
+			_ = os.Remove(target)
+			if err := os.Symlink(hdr.Linkname, target); err != nil {
+				return err
+			}
+		default:
+			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+				return err
+			}
+			f, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, os.FileMode(hdr.Mode))
+			if err != nil {
+				return err
+			}
+			if _, copyErr := io.Copy(f, tr); copyErr != nil {
+				f.Close()
+				return copyErr
+			}
+			if err := f.Close(); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 func Down() error {
