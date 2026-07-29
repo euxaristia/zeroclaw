@@ -8,6 +8,8 @@ package env
 import (
 	"archive/tar"
 	"bytes"
+	"context"
+	"debug/elf"
 	"fmt"
 	"io"
 	"os"
@@ -15,8 +17,6 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-
-	"context"
 )
 
 const (
@@ -25,6 +25,22 @@ const (
 	Volume    = "zeroclaw-home"
 	Home      = "/home/zeroclaw"
 )
+
+var backendDoctor func(w io.Writer, container string)
+
+// RegisterBackendDoctor registers a callback for backend-specific health checks inside the container.
+func RegisterBackendDoctor(fn func(w io.Writer, container string)) {
+	backendDoctor = fn
+}
+
+func isLinuxAMD64(path string) bool {
+	f, err := elf.Open(path)
+	if err != nil {
+		return false
+	}
+	_ = f.Close()
+	return f.Machine == elf.EM_X86_64
+}
 
 func docker(args ...string) (string, error) {
 	cmd := exec.Command("docker", args...)
@@ -400,14 +416,24 @@ func Doctor(w io.Writer) error {
 	running := dockerOK("exec", Container, "true")
 	check("container "+Container+" running", running, "zeroclaw up")
 	if running {
-		out, err := docker("exec", Container, "zero", "--version")
-		check("zero inside container ("+strings.TrimSpace(out)+")", err == nil, "")
+		if backendDoctor != nil {
+			backendDoctor(w, Container)
+		}
 		check("zero credentials adopted", dockerOK("exec", Container, "test", "-e", Home+"/.config/zero/credentials.enc"), "zeroclaw up copies them from the host zero config")
 	}
 	dir, err := envDir()
 	check("env build context", err == nil, "run from the zeroclaw repo")
 	if err == nil {
-		check("env/bin/zero (linux build)", fileExists(filepath.Join(dir, "bin", "zero")), "cross-compile zero for linux/amd64")
+		zeroBin := filepath.Join(dir, "bin", "zero")
+		check("env/bin/zero (linux build)", isLinuxAMD64(zeroBin), "cross-compile zero for linux/amd64")
+		cairnBin := filepath.Join(dir, "bin", "cairn-code")
+		if fileExists(cairnBin) {
+			if isLinuxAMD64(cairnBin) {
+				check("env/bin/cairn-code (linux build)", true, "")
+			} else {
+				check("env/bin/cairn-code (artifact present, not linux/amd64)", false, "cross-compile cairn-code for linux/amd64")
+			}
+		}
 	}
 	fmt.Fprintln(w, "note: running without hard isolation is not supported yet; docker is required (tier 3 fallback is an M4 item)")
 	return nil
