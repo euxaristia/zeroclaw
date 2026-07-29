@@ -209,24 +209,51 @@ func Give(hostPath string) error {
 	return nil
 }
 
+// sanitizeContainerPath resolves a user-supplied container path against Home
+// and rejects any path that would escape it. path.Clean strips a trailing
+// "/.", which docker cp treats specially (copy the directory's contents
+// rather than the directory itself), so that marker is preserved separately.
+func sanitizeContainerPath(containerPath string) (string, error) {
+	trailingDot := containerPath == "." || strings.HasSuffix(containerPath, "/.")
+	clean := containerPath
+	if !path.IsAbs(clean) {
+		clean = path.Join(Home, clean)
+	} else {
+		clean = path.Clean(clean)
+	}
+	if clean != Home && !strings.HasPrefix(clean, Home+"/") {
+		return "", fmt.Errorf("path traversal denied: %s is outside agent home", containerPath)
+	}
+	if trailingDot {
+		clean += "/."
+	}
+	return clean, nil
+}
+
 // Take copies a file or directory out of the agent's home to a host path.
 // Relative container paths are resolved against the agent home.
 func Take(containerPath, hostDest string) error {
-	if !path.IsAbs(containerPath) {
-		containerPath = path.Join(Home, containerPath)
-	} else {
-		containerPath = path.Clean(containerPath)
+	clean, err := sanitizeContainerPath(containerPath)
+	if err != nil {
+		return err
 	}
-	if !strings.HasPrefix(containerPath, Home+"/") && containerPath != Home {
-		return fmt.Errorf("path traversal denied: %s is outside agent home", containerPath)
+	// sanitizeContainerPath only checks the string form of the path. A
+	// symlink inside the container could still point outside Home, so the
+	// in-container real path is resolved and checked before the copy.
+	real, err := docker("exec", Container, "readlink", "-f", strings.TrimSuffix(clean, "/."))
+	if err != nil {
+		return fmt.Errorf("resolving %s in container: %w", containerPath, err)
+	}
+	if real != Home && !strings.HasPrefix(real, Home+"/") {
+		return fmt.Errorf("path traversal denied: %s resolves to %s outside agent home", containerPath, real)
 	}
 	if hostDest == "" {
 		hostDest = "."
 	}
-	if _, err := docker("cp", Container+":"+containerPath, hostDest); err != nil {
+	if _, err := docker("cp", Container+":"+clean, hostDest); err != nil {
 		return err
 	}
-	fmt.Println("took", containerPath, "->", hostDest)
+	fmt.Println("took", clean, "->", hostDest)
 	return nil
 }
 
