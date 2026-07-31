@@ -1,6 +1,9 @@
 package env
 
 import (
+	"archive/tar"
+	"bytes"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -72,6 +75,71 @@ func TestSafeJoin(t *testing.T) {
 			rel, relErr := filepath.Rel(destDir, got)
 			if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 				t.Fatalf("safeJoin(%q, %q) = %q, escapes destDir", destDir, c.in, got)
+			}
+		})
+	}
+}
+
+func TestExtractTarPermissionsMasking(t *testing.T) {
+	cases := []struct {
+		name     string
+		typeflag byte
+		mode     int64
+		wantMode os.FileMode
+	}{
+		{
+			name:     "dir with SUID/SGID/sticky bits",
+			typeflag: tar.TypeDir,
+			mode:     0o777 | 04000 | 02000 | 01000,
+			wantMode: 0o777,
+		},
+		{
+			name:     "regular file with SUID/SGID/sticky bits",
+			typeflag: tar.TypeReg,
+			mode:     0o644 | 04000 | 02000 | 01000,
+			wantMode: 0o644,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			destDir := t.TempDir()
+			var buf bytes.Buffer
+			tw := tar.NewWriter(&buf)
+
+			entryName := "testentry"
+			if c.typeflag == tar.TypeDir {
+				entryName += "/"
+			}
+
+			hdr := &tar.Header{
+				Name:     entryName,
+				Typeflag: c.typeflag,
+				Mode:     c.mode,
+				Size:     int64(len("data")),
+			}
+			if err := tw.WriteHeader(hdr); err != nil {
+				t.Fatalf("WriteHeader failed: %v", err)
+			}
+			if c.typeflag == tar.TypeReg {
+				if _, err := tw.Write([]byte("data")); err != nil {
+					t.Fatalf("Write payload failed: %v", err)
+				}
+			}
+			tw.Close()
+
+			if err := extractTar(&buf, destDir); err != nil {
+				t.Fatalf("extractTar failed: %v", err)
+			}
+
+			targetPath := filepath.Join(destDir, "testentry")
+			info, err := os.Stat(targetPath)
+			if err != nil {
+				t.Fatalf("os.Stat(%q) failed: %v", targetPath, err)
+			}
+
+			if info.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 {
+				t.Errorf("extracted entry mode %v has SUID/SGID/sticky bits, want masked", info.Mode())
 			}
 		})
 	}
