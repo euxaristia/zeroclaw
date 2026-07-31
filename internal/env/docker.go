@@ -345,7 +345,7 @@ func extractTar(r io.Reader, destDir string) error {
 		}
 		switch hdr.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(target, os.FileMode(hdr.Mode)); err != nil {
+			if err := os.MkdirAll(target, os.FileMode(hdr.Mode)&os.ModePerm); err != nil {
 				return err
 			}
 		case tar.TypeSymlink:
@@ -366,7 +366,7 @@ func extractTar(r io.Reader, destDir string) error {
 				return err
 			}
 			_ = os.Remove(target) // don't write through a pre-existing symlink
-			f, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, os.FileMode(hdr.Mode))
+			f, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, os.FileMode(hdr.Mode)&os.ModePerm)
 			if err != nil {
 				return err
 			}
