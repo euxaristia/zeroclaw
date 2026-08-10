@@ -68,9 +68,6 @@ func (CairnDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Even
 	if err != nil {
 		return TurnResult{}, err
 	}
-	if err := cmd.Start(); err != nil {
-		return TurnResult{}, fmt.Errorf("starting cairn-code exec in container: %w", err)
-	}
 
 	input, err := json.Marshal(map[string]any{
 		"schemaVersion": 2,
@@ -81,6 +78,11 @@ func (CairnDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Even
 	if err != nil {
 		return TurnResult{}, err
 	}
+
+	if err := cmd.Start(); err != nil {
+		return TurnResult{}, fmt.Errorf("starting cairn-code exec in container: %w", err)
+	}
+
 	if _, err := stdin.Write(append(input, '\n')); err != nil {
 		_ = stdin.Close()
 		if cmd.Process != nil {

@@ -72,9 +72,6 @@ func (ZeroDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Event
 	if err != nil {
 		return TurnResult{}, err
 	}
-	if err := cmd.Start(); err != nil {
-		return TurnResult{}, fmt.Errorf("starting zero exec in container: %w", err)
-	}
 
 	input, err := json.Marshal(map[string]any{
 		"schemaVersion": 2,
@@ -85,10 +82,20 @@ func (ZeroDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Event
 	if err != nil {
 		return TurnResult{}, err
 	}
+
+	if err := cmd.Start(); err != nil {
+		return TurnResult{}, fmt.Errorf("starting zero exec in container: %w", err)
+	}
+
 	if _, err := stdin.Write(append(input, '\n')); err != nil {
+		_ = stdin.Close()
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+		_ = cmd.Wait()
 		return TurnResult{}, fmt.Errorf("writing input event: %w", err)
 	}
-	stdin.Close()
+	_ = stdin.Close()
 
 	res := TurnResult{ExitCode: -1}
 	sc := bufio.NewScanner(stdout)
