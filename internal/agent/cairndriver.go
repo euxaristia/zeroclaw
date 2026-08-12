@@ -79,6 +79,11 @@ func (CairnDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Even
 		"content":       opts.Prompt,
 	})
 	if err != nil {
+		_ = stdin.Close()
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+		_ = cmd.Wait()
 		return TurnResult{}, err
 	}
 	if _, err := stdin.Write(append(input, '\n')); err != nil {
