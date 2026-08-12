@@ -38,7 +38,7 @@ func (CairnDriver) Doctor(container string) HealthResult {
 	}
 }
 
-func (CairnDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Event)) (TurnResult, error) {
+func (CairnDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Event)) (res TurnResult, err error) {
 	args := []string{
 		"exec", "-i", env.Container, "cairn-code", "exec",
 		"--input-format", "stream-json",
@@ -60,43 +60,45 @@ func (CairnDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Even
 
 	cmd := env.DockerCommandContext(ctx, args...)
 	cmd.Stderr = os.Stderr
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return TurnResult{}, err
+	stdin, pipeErr := cmd.StdinPipe()
+	if pipeErr != nil {
+		return TurnResult{}, pipeErr
 	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return TurnResult{}, err
+	stdout, pipeErr := cmd.StdoutPipe()
+	if pipeErr != nil {
+		return TurnResult{}, pipeErr
 	}
-	if err := cmd.Start(); err != nil {
-		return TurnResult{}, fmt.Errorf("starting cairn-code exec in container: %w", err)
+	if startErr := cmd.Start(); startErr != nil {
+		return TurnResult{}, fmt.Errorf("starting cairn-code exec in container: %w", startErr)
 	}
 
-	input, err := json.Marshal(map[string]any{
+	defer func() {
+		if err != nil {
+			_ = stdin.Close()
+			if cmd.Process != nil {
+				_ = cmd.Process.Kill()
+			}
+			_ = cmd.Wait()
+		}
+	}()
+
+	input, marshalErr := json.Marshal(map[string]any{
 		"schemaVersion": 2,
 		"type":          "message",
 		"role":          "user",
 		"content":       opts.Prompt,
 	})
-	if err != nil {
-		_ = stdin.Close()
-		if cmd.Process != nil {
-			_ = cmd.Process.Kill()
-		}
-		_ = cmd.Wait()
-		return TurnResult{}, err
+	if marshalErr != nil {
+		err = marshalErr
+		return
 	}
-	if _, err := stdin.Write(append(input, '\n')); err != nil {
-		_ = stdin.Close()
-		if cmd.Process != nil {
-			_ = cmd.Process.Kill()
-		}
-		_ = cmd.Wait()
-		return TurnResult{}, fmt.Errorf("writing input event: %w", err)
+	if _, writeErr := stdin.Write(append(input, '\n')); writeErr != nil {
+		err = fmt.Errorf("writing input event: %w", writeErr)
+		return
 	}
 	_ = stdin.Close()
 
-	res := TurnResult{ExitCode: -1}
+	res = TurnResult{ExitCode: -1}
 	sc := bufio.NewScanner(stdout)
 	sc.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
 	for sc.Scan() {
@@ -121,18 +123,17 @@ func (CairnDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Even
 			res.ExitCode = ev.ExitCode
 		}
 	}
-	if err := sc.Err(); err != nil {
-		if cmd.Process != nil {
-			_ = cmd.Process.Kill()
-		}
-		_ = cmd.Wait()
-		return res, fmt.Errorf("reading cairn-code events: %w", err)
+	if scanErr := sc.Err(); scanErr != nil {
+		err = fmt.Errorf("reading cairn-code events: %w", scanErr)
+		return
 	}
-	if err := cmd.Wait(); err != nil && res.Status == "" {
-		return res, fmt.Errorf("cairn-code exec failed before run_end: %w", err)
+	if waitErr := cmd.Wait(); waitErr != nil && res.Status == "" {
+		err = fmt.Errorf("cairn-code exec failed before run_end: %w", waitErr)
+		return
 	}
 	if res.Status == "" {
-		return res, fmt.Errorf("cairn-code exec ended without a run_end event")
+		err = fmt.Errorf("cairn-code exec ended without a run_end event")
+		return
 	}
 	return res, nil
 }
