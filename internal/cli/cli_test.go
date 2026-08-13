@@ -78,11 +78,13 @@ func TestRunDaemonArgCount(t *testing.T) {
 }
 
 func TestRunHelp(t *testing.T) {
-	if err := Run([]string{"help"}); err != nil {
-		t.Errorf("Run([help]) returned error %v, want nil", err)
-	}
-	if err := Run([]string{"--help"}); err != nil {
-		t.Errorf("Run([--help]) returned error %v, want nil", err)
+	for _, flag := range []string{"help", "-h", "--help"} {
+		if err := Run([]string{flag}); err != nil {
+			t.Errorf("Run([%s]) returned error %v, want nil", flag, err)
+		}
+		if err := Run([]string{flag, "auth"}); err != nil {
+			t.Errorf("Run([%s, auth]) returned error %v, want nil", flag, err)
+		}
 	}
 }
 
