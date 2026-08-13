@@ -58,8 +58,9 @@ type model struct {
 	// Exiting.
 	exiting bool
 
-	// Interactive picker overlay (/model, /provider).
-	picker *commandPicker
+	// Interactive picker overlay (/model, /provider, /theme, /command).
+	picker     *commandPicker
+	savedTheme tuiTheme
 
 	// send delivers messages from background goroutines. Set by Run before
 	// the program starts; unused on the model copy (programSend is the real
@@ -207,13 +208,21 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.picker != nil {
 		switch {
 		case msg.Key().Code == tea.KeyEsc:
+			if m.picker.kind == pickerTheme {
+				zcTheme = m.savedTheme
+			}
 			m.picker = nil
+			if strings.HasPrefix(m.input, "/") {
+				m.input = ""
+			}
 			return m, nil
 		case msg.Key().Code == tea.KeyUp:
 			m.picker.move(-1)
+			m.previewSelectedTheme()
 			return m, nil
 		case msg.Key().Code == tea.KeyDown:
 			m.picker.move(1)
+			m.previewSelectedTheme()
 			return m, nil
 		case msg.Key().Code == tea.KeyEnter:
 			item, ok := m.picker.current()
@@ -244,15 +253,39 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 							text: "Switched theme to " + entry.Name,
 						})
 					}
+				} else if kind == pickerCommand {
+					m.input = ""
+					return m.executeSlashCommand(item.Value)
 				}
 			}
 			return m, nil
 		case msg.Key().Code == tea.KeyBackspace:
+			if m.picker.kind == pickerCommand {
+				if len(m.input) > 0 {
+					runes := []rune(m.input)
+					m.input = string(runes[:len(runes)-1])
+				}
+				if m.input == "" || !strings.HasPrefix(m.input, "/") {
+					m.picker = nil
+				} else {
+					m.picker.query = strings.TrimPrefix(m.input, "/")
+					m.picker.applyQuery()
+				}
+				return m, nil
+			}
 			m.picker.deleteQueryRune()
+			m.previewSelectedTheme()
 			return m, nil
 		default:
 			if msg.Key().Text != "" && !msg.Key().Mod.Contains(tea.ModCtrl) && !msg.Key().Mod.Contains(tea.ModAlt) {
+				if m.picker.kind == pickerCommand {
+					m.input += msg.Key().Text
+					m.picker.query = strings.TrimPrefix(m.input, "/")
+					m.picker.applyQuery()
+					return m, nil
+				}
 				m.picker.appendQuery(msg.Key().Text)
+				m.previewSelectedTheme()
 			}
 			return m, nil
 		}
@@ -301,20 +334,18 @@ func (m model) handleScroll(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	default:
 		// Regular character input when not pending.
 		if !m.pending && msg.Key().Text != "" {
+			if m.input == "" && msg.Key().Text == "/" {
+				m.input = "/"
+				m.picker = m.newCommandPicker()
+				return m, nil
+			}
 			m.input += msg.Key().Text
 		}
 		return m, nil
 	}
 }
 
-func (m model) handleSubmit() (tea.Model, tea.Cmd) {
-	text := strings.TrimSpace(m.input)
-	m.input = ""
-	if text == "" {
-		return m, nil
-	}
-
-	// Slash commands.
+func (m model) executeSlashCommand(text string) (tea.Model, tea.Cmd) {
 	switch {
 	case text == "/quit" || text == "/exit":
 		return m, tea.Quit
@@ -349,7 +380,7 @@ func (m model) handleSubmit() (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case text == "/theme":
-		m.picker = m.newThemePicker()
+		m.openThemePicker()
 		return m, nil
 	case strings.HasPrefix(text, "/theme "):
 		arg := strings.TrimSpace(text[7:])
@@ -368,6 +399,37 @@ func (m model) handleSubmit() (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	}
+	return m, nil
+}
+
+func (m *model) previewSelectedTheme() {
+	if m.picker == nil || m.picker.kind != pickerTheme {
+		return
+	}
+	if item, ok := m.picker.current(); ok {
+		if entry, ok := lookupTheme(item.Value); ok {
+			zcTheme = buildTheme(entry.Palette)
+		}
+	}
+}
+
+func (m *model) openThemePicker() {
+	m.savedTheme = zcTheme
+	m.picker = m.newThemePicker()
+	m.previewSelectedTheme()
+}
+
+func (m model) handleSubmit() (tea.Model, tea.Cmd) {
+	text := strings.TrimSpace(m.input)
+	m.input = ""
+	if text == "" {
+		return m, nil
+	}
+
+	// Slash commands.
+	if strings.HasPrefix(text, "/") {
+		return m.executeSlashCommand(text)
 	}
 
 	// Record input history.

@@ -225,3 +225,28 @@ func TestThemePickerAndSwitching(t *testing.T) {
 		t.Errorf("expected system message for theme %s", item.Value)
 	}
 }
+
+func TestSlashCommandPickerTrigger(t *testing.T) {
+	m := newModel(context.Background(), Options{Conversation: "conv-test"})
+
+	// Typing '/' into empty prompt opens command picker
+	m2, _ := m.handleKey(tea.KeyPressMsg(tea.Key{Text: "/"}))
+	m = m2.(model)
+	if m.picker == nil || m.picker.kind != pickerCommand {
+		t.Fatalf("expected command picker to open when typing /")
+	}
+
+	// Typing 'm' filters items to /model
+	m2, _ = m.handleKey(tea.KeyPressMsg(tea.Key{Text: "m"}))
+	m = m2.(model)
+	if m.picker.query != "m" {
+		t.Errorf("expected query 'm', got '%s'", m.picker.query)
+	}
+
+	// Hitting Enter on /model opens model picker
+	m2, _ = m.handleKey(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	m = m2.(model)
+	if m.picker == nil || m.picker.kind != pickerModel {
+		t.Fatalf("expected model picker to open after selecting /model")
+	}
+}

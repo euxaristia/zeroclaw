@@ -13,6 +13,7 @@ const (
 	pickerModel pickerKind = iota
 	pickerProvider
 	pickerTheme
+	pickerCommand
 )
 
 type pickerItem struct {
@@ -237,6 +238,24 @@ func (m model) newThemePicker() *commandPicker {
 	return &commandPicker{
 		kind:     pickerTheme,
 		title:    "Choose a theme",
+		items:    items,
+		allItems: append([]pickerItem{}, items...),
+		selected: 0,
+	}
+}
+
+func (m model) newCommandPicker() *commandPicker {
+	items := []pickerItem{
+		{Group: "Commands", Label: "/model", Value: "/model", Meta: "Choose an LLM model"},
+		{Group: "Commands", Label: "/provider", Value: "/provider", Meta: "Choose an LLM provider"},
+		{Group: "Commands", Label: "/theme", Value: "/theme", Meta: "Choose a UI color theme"},
+		{Group: "Commands", Label: "/clear", Value: "/clear", Meta: "Clear chat transcript"},
+		{Group: "Commands", Label: "/quit", Value: "/quit", Meta: "Exit zeroclaw chat"},
+	}
+
+	return &commandPicker{
+		kind:     pickerCommand,
+		title:    "Choose a command",
 		items:    items,
 		allItems: append([]pickerItem{}, items...),
 		selected: 0,
