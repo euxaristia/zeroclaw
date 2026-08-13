@@ -250,3 +250,54 @@ func TestSlashCommandPickerTrigger(t *testing.T) {
 		t.Fatalf("expected model picker to open after selecting /model")
 	}
 }
+
+func TestProviderGatedModelPicker(t *testing.T) {
+	m := newModel(context.Background(), Options{Conversation: "conv-test"})
+	m.providerName = "gitlawb-opengateway"
+
+	picker := m.newModelPicker()
+	if !strings.Contains(picker.title, "gitlawb-opengateway") {
+		t.Errorf("expected title to contain gitlawb-opengateway, got %s", picker.title)
+	}
+	for _, item := range picker.items {
+		if item.Provider != "gitlawb-opengateway" && item.Group != "Active Model" {
+			t.Errorf("unexpected model item from provider %s in gitlawb-opengateway gated picker", item.Provider)
+		}
+	}
+}
+
+func TestPickerBackStackEsc(t *testing.T) {
+	m := newModel(context.Background(), Options{Conversation: "conv-test"})
+
+	// 1. Open /provider
+	m.input = "/provider"
+	m2, _ := m.handleSubmit()
+	m = m2.(model)
+	if m.picker == nil || m.picker.kind != pickerProvider {
+		t.Fatalf("expected provider picker to open")
+	}
+
+	// 2. Select first item (gitlawb-opengateway) -> opens model picker with prev set to provider picker
+	m2, _ = m.handleKey(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	m = m2.(model)
+	if m.picker == nil || m.picker.kind != pickerModel {
+		t.Fatalf("expected model picker to open")
+	}
+	if m.picker.prev == nil || m.picker.prev.kind != pickerProvider {
+		t.Fatalf("expected picker.prev to point to provider picker")
+	}
+
+	// 3. Press Esc -> should return to provider picker instead of closing
+	m2, _ = m.handleKey(tea.KeyPressMsg(tea.Key{Code: tea.KeyEsc}))
+	m = m2.(model)
+	if m.picker == nil || m.picker.kind != pickerProvider {
+		t.Fatalf("expected Esc to return to provider picker, got %+v", m.picker)
+	}
+
+	// 4. Press Esc again -> should close picker since prev was nil
+	m2, _ = m.handleKey(tea.KeyPressMsg(tea.Key{Code: tea.KeyEsc}))
+	m = m2.(model)
+	if m.picker != nil {
+		t.Errorf("expected Esc on top-level picker to close overlay")
+	}
+}

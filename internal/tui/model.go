@@ -59,8 +59,9 @@ type model struct {
 	exiting bool
 
 	// Interactive picker overlay (/model, /provider, /theme, /command).
-	picker     *commandPicker
-	savedTheme tuiTheme
+	picker        *commandPicker
+	savedTheme    tuiTheme
+	fetchedModels map[string][]pickerItem
 
 	// send delivers messages from background goroutines. Set by Run before
 	// the program starts; unused on the model copy (programSend is the real
@@ -107,6 +108,26 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
+
+	case modelsFetchedMsg:
+		if msg.err == nil && len(msg.items) > 0 {
+			if m.fetchedModels == nil {
+				m.fetchedModels = make(map[string][]pickerItem)
+			}
+			m.fetchedModels[msg.provider] = msg.items
+
+			activeProvider := strings.TrimSpace(m.providerName)
+			if activeProvider == "" {
+				activeProvider = "gitlawb-opengateway"
+			}
+			if msg.provider == activeProvider && m.picker != nil && m.picker.kind == pickerModel {
+				query := m.picker.query
+				m.picker = m.newModelPicker()
+				m.picker.query = query
+				m.picker.applyQuery()
+			}
+		}
+		return m, nil
 
 	case runStartMsg:
 		m.sessionID = msg.sessionID
@@ -211,8 +232,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.picker.kind == pickerTheme {
 				zcTheme = m.savedTheme
 			}
-			m.picker = nil
-			if strings.HasPrefix(m.input, "/") {
+			prev := m.picker.prev
+			m.picker = prev
+			if prev == nil && strings.HasPrefix(m.input, "/") {
 				m.input = ""
 			}
 			return m, nil
@@ -227,6 +249,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case msg.Key().Code == tea.KeyEnter:
 			item, ok := m.picker.current()
 			kind := m.picker.kind
+			oldPicker := m.picker
 			m.picker = nil
 			if ok {
 				if kind == pickerModel {
@@ -244,7 +267,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 						kind: rowSystem,
 						text: "Switched provider to " + item.Value,
 					})
-					m.picker = m.newModelPicker()
+					return m.openModelPickerWithPrev(oldPicker)
 				} else if kind == pickerTheme {
 					if entry, ok := lookupTheme(item.Value); ok {
 						zcTheme = buildTheme(entry.Palette)
@@ -255,7 +278,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					}
 				} else if kind == pickerCommand {
 					m.input = ""
-					return m.executeSlashCommand(item.Value)
+					return m.executeSlashCommandWithPrev(item.Value, oldPicker)
 				}
 			}
 			return m, nil
@@ -345,7 +368,7 @@ func (m model) handleScroll(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 }
 
-func (m model) executeSlashCommand(text string) (tea.Model, tea.Cmd) {
+func (m model) executeSlashCommandWithPrev(text string, prev *commandPicker) (model, tea.Cmd) {
 	switch {
 	case text == "/quit" || text == "/exit":
 		return m, tea.Quit
@@ -354,8 +377,7 @@ func (m model) executeSlashCommand(text string) (tea.Model, tea.Cmd) {
 		m.scrollOffset = 0
 		return m, nil
 	case text == "/model":
-		m.picker = m.newModelPicker()
-		return m, nil
+		return m.openModelPickerWithPrev(prev)
 	case strings.HasPrefix(text, "/model "):
 		arg := strings.TrimSpace(text[7:])
 		if arg != "" {
@@ -368,6 +390,9 @@ func (m model) executeSlashCommand(text string) (tea.Model, tea.Cmd) {
 		return m, nil
 	case text == "/provider":
 		m.picker = m.newProviderPicker()
+		if m.picker != nil {
+			m.picker.prev = prev
+		}
 		return m, nil
 	case strings.HasPrefix(text, "/provider "):
 		arg := strings.TrimSpace(text[10:])
@@ -380,7 +405,7 @@ func (m model) executeSlashCommand(text string) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case text == "/theme":
-		m.openThemePicker()
+		m = m.openThemePickerWithPrev(prev)
 		return m, nil
 	case strings.HasPrefix(text, "/theme "):
 		arg := strings.TrimSpace(text[7:])
@@ -403,7 +428,11 @@ func (m model) executeSlashCommand(text string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *model) previewSelectedTheme() {
+func (m model) executeSlashCommand(text string) (model, tea.Cmd) {
+	return m.executeSlashCommandWithPrev(text, nil)
+}
+
+func (m model) previewSelectedTheme() {
 	if m.picker == nil || m.picker.kind != pickerTheme {
 		return
 	}
@@ -414,10 +443,37 @@ func (m *model) previewSelectedTheme() {
 	}
 }
 
-func (m *model) openThemePicker() {
+func (m model) openThemePickerWithPrev(prev *commandPicker) model {
 	m.savedTheme = zcTheme
 	m.picker = m.newThemePicker()
+	if m.picker != nil {
+		m.picker.prev = prev
+	}
 	m.previewSelectedTheme()
+	return m
+}
+
+func (m model) openThemePicker() model {
+	return m.openThemePickerWithPrev(nil)
+}
+
+func (m model) openModelPickerWithPrev(prev *commandPicker) (model, tea.Cmd) {
+	m.picker = m.newModelPicker()
+	if m.picker != nil {
+		m.picker.prev = prev
+	}
+	activeProvider := strings.TrimSpace(m.providerName)
+	if activeProvider == "" {
+		activeProvider = "gitlawb-opengateway"
+	}
+	if (activeProvider == "gitlawb-opengateway" || activeProvider == "openrouter") && len(m.fetchedModels[activeProvider]) == 0 {
+		return m, fetchModelsCmd(activeProvider)
+	}
+	return m, nil
+}
+
+func (m model) openModelPicker() (model, tea.Cmd) {
+	return m.openModelPickerWithPrev(nil)
 }
 
 func (m model) handleSubmit() (tea.Model, tea.Cmd) {

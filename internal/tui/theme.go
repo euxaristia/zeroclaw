@@ -38,6 +38,7 @@ type tuiTheme struct {
 	line            lipgloss.Style
 	lineStrong      lipgloss.Style
 	badge           lipgloss.Style
+	selectedRow     lipgloss.Style
 	userPrompt      lipgloss.Style
 	toolName        lipgloss.Style
 	toolTarget      lipgloss.Style
@@ -74,6 +75,11 @@ func buildTheme(p palette) tuiTheme {
 			Background(lipgloss.Color(p.accent)).
 			Bold(true).
 			Padding(0, 1),
+
+		selectedRow: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(p.onAccent)).
+			Background(lipgloss.Color(p.accent)).
+			Bold(true),
 
 		userPrompt: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(p.ink)).
