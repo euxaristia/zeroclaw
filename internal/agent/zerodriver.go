@@ -49,6 +49,9 @@ func (ZeroDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Event
 		"--output-format", "stream-json",
 		"-C", workspace,
 	}
+	if opts.Model != "" {
+		args = append(args, "--model", opts.Model)
+	}
 	if opts.Autonomy != "" {
 		args = append(args, "--auto", opts.Autonomy)
 	}

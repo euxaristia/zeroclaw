@@ -61,3 +61,12 @@ func TestDoctor(t *testing.T) {
 		t.Errorf("CairnDriver.Doctor() returned empty hint on failure")
 	}
 }
+
+func TestTurnOptionsModel(t *testing.T) {
+	opts := TurnOptions{
+		Model: "gpt-4o",
+	}
+	if opts.Model != "gpt-4o" {
+		t.Errorf("TurnOptions.Model = %q, want %q", opts.Model, "gpt-4o")
+	}
+}
