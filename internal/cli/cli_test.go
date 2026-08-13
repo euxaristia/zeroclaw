@@ -32,6 +32,15 @@ func TestRunExecEmpty(t *testing.T) {
 	}
 }
 
+func TestRunRaceEmpty(t *testing.T) {
+	if err := Run([]string{"race"}); err == nil {
+		t.Error("Run([race]) returned nil error, want usage error")
+	}
+	if err := Run([]string{"race", "   "}); err == nil {
+		t.Error("Run([race, '   ']) returned nil error, want usage error")
+	}
+}
+
 func TestRunGiveArgCount(t *testing.T) {
 	if err := Run([]string{"give"}); err == nil {
 		t.Error("Run([give]) returned nil error, want usage error")
