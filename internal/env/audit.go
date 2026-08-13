@@ -145,13 +145,13 @@ func RunAudit() AuditReport {
 		ctxCheck, cancelCheck := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancelCheck()
 
-		cmdCheck := DockerCommandContext(ctxCheck, "exec", Container, "test", "-f", Home+"/ZERO.md")
+		cmdCheck := DockerCommandContext(ctxCheck, "exec", Container, "test", "-f", Home+"/.config/zero/ZERO.md")
 		if err := cmdCheck.Run(); err != nil {
 			items = append(items, AuditItem{
 				Category: "Agent Identity",
 				Name:     "Bootstrap Seed (ZERO.md)",
 				Status:   StatusWarn,
-				Detail:   "Agent home missing bootstrap ZERO.md identity file.",
+				Detail:   "Agent home missing bootstrap ZERO.md identity file in ~/.config/zero/ZERO.md.",
 				Hint:     "Run `zeroclaw up` to auto-seed bootstrap files into agent volume.",
 			})
 		} else {
@@ -159,7 +159,7 @@ func RunAudit() AuditReport {
 				Category: "Agent Identity",
 				Name:     "Bootstrap Seed (ZERO.md)",
 				Status:   StatusPass,
-				Detail:   "Agent identity & operating rules (ZERO.md) present in home volume.",
+				Detail:   "Agent identity & operating rules (ZERO.md) present in agent configuration.",
 			})
 		}
 	}
