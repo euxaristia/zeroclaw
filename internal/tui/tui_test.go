@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -161,11 +162,22 @@ func TestPickersAndModelSwitching(t *testing.T) {
 	}
 
 	// Render overlay
-	m.width = 80
+	m.width = 120
 	m.height = 24
 	view := m.View()
 	if view.Content == "" {
 		t.Errorf("expected non-empty view with picker overlay")
+	}
+	// Check that top border of modal starts with leading spaces (horizontally centered)
+	foundCenteredBorder := false
+	for _, l := range strings.Split(view.Content, "\n") {
+		if strings.Contains(l, "\u256d\u2500") && strings.HasPrefix(l, " ") {
+			foundCenteredBorder = true
+			break
+		}
+	}
+	if !foundCenteredBorder {
+		t.Errorf("expected modal top border to be horizontally centered with leading spaces")
 	}
 
 	// Select item via Enter

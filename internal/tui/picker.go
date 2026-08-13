@@ -91,6 +91,13 @@ func (p *commandPicker) applyQuery() {
 func (m model) newModelPicker() *commandPicker {
 	var items []pickerItem
 
+	// GitLawb OpenGateway
+	items = append(items,
+		pickerItem{Group: "GitLawb OpenGateway", Label: "NVIDIA Nemotron 3 Ultra 550B (Free)", Value: "nvidia/nemotron-3-ultra-550b-a55b:free", Meta: "128K ctx · free", Provider: "gitlawb-opengateway"},
+		pickerItem{Group: "GitLawb OpenGateway", Label: "Mimo v2.5 Pro", Value: "mimo-v2.5-pro", Meta: "128K ctx · smart-route", Provider: "gitlawb-opengateway"},
+		pickerItem{Group: "GitLawb OpenGateway", Label: "Qwen 3 Coder 480B", Value: "qwen3-coder:480b", Meta: "128K ctx · code", Provider: "gitlawb-opengateway"},
+	)
+
 	// OpenRouter
 	items = append(items,
 		pickerItem{Group: "OpenRouter", Label: "Claude 3.5 Sonnet", Value: "anthropic/claude-3.5-sonnet", Meta: "200K ctx · tools · vision", Provider: "openrouter"},
@@ -101,7 +108,6 @@ func (m model) newModelPicker() *commandPicker {
 		pickerItem{Group: "OpenRouter", Label: "GPT-4o Mini", Value: "openai/gpt-4o-mini", Meta: "128K ctx · fast · tools", Provider: "openrouter"},
 		pickerItem{Group: "OpenRouter", Label: "DeepSeek Chat (V3)", Value: "deepseek/deepseek-chat", Meta: "64K ctx · tools", Provider: "openrouter"},
 		pickerItem{Group: "OpenRouter", Label: "DeepSeek R1", Value: "deepseek/deepseek-r1", Meta: "64K ctx · reasoning", Provider: "openrouter"},
-		pickerItem{Group: "OpenRouter", Label: "NVIDIA Nemotron 3 Ultra 550B (Free)", Value: "nvidia/nemotron-3-ultra-550b-a55b:free", Meta: "128K ctx · free", Provider: "openrouter"},
 		pickerItem{Group: "OpenRouter", Label: "Llama 3.3 70B Instruct", Value: "meta-llama/llama-3.3-70b-instruct", Meta: "128K ctx · tools", Provider: "openrouter"},
 	)
 
@@ -181,6 +187,7 @@ func (m model) newModelPicker() *commandPicker {
 
 func (m model) newProviderPicker() *commandPicker {
 	items := []pickerItem{
+		{Group: "Providers", Label: "GitLawb OpenGateway", Value: "gitlawb-opengateway", Meta: "smart-routing gateway"},
 		{Group: "Providers", Label: "OpenRouter", Value: "openrouter", Meta: "multi-provider gateway"},
 		{Group: "Providers", Label: "Anthropic", Value: "anthropic", Meta: "Claude models"},
 		{Group: "Providers", Label: "OpenAI", Value: "openai", Meta: "GPT & o-series models"},
@@ -308,7 +315,29 @@ func (m model) pickerOverlay(width int) string {
 	}
 	box = append(box, botRule)
 
-	return strings.Join(box, "\n")
+	return centerRenderedBlock(strings.Join(box, "\n"), width)
+}
+
+func centerRenderedBlock(block string, width int) string {
+	if block == "" || width <= 0 {
+		return block
+	}
+	lines := strings.Split(block, "\n")
+	maxWidth := 0
+	for _, l := range lines {
+		if w := lipgloss.Width(l); w > maxWidth {
+			maxWidth = w
+		}
+	}
+	pad := (width - maxWidth) / 2
+	if pad <= 0 {
+		return block
+	}
+	indent := strings.Repeat(" ", pad)
+	for i, l := range lines {
+		lines[i] = indent + l
+	}
+	return strings.Join(lines, "\n")
 }
 
 func fitWidth(s string, width int) string {
