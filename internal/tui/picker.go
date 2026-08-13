@@ -128,8 +128,8 @@ func (m model) newModelPicker() *commandPicker {
 
 	// DeepSeek Direct
 	items = append(items,
-		pickerItem{Group: "DeepSeek", Label: "DeepSeek V3 (Chat)", Value: "deepseek-chat", Meta: "64K ctx · tools", Provider: "deepseek"},
-		pickerItem{Group: "DeepSeek", Label: "DeepSeek R1 (Reasoner)", Value: "deepseek-reasoner", Meta: "64K ctx · reasoning", Provider: "deepseek"},
+		pickerItem{Group: "DeepSeek", Label: "DeepSeek V4 Pro", Value: "deepseek-chat", Meta: "128K ctx · tools", Provider: "deepseek"},
+		pickerItem{Group: "DeepSeek", Label: "DeepSeek V4 Flash", Value: "deepseek-reasoner", Meta: "128K ctx · fast · reasoning", Provider: "deepseek"},
 	)
 
 	// Google Direct
@@ -191,7 +191,7 @@ func (m model) newProviderPicker() *commandPicker {
 		{Group: "Providers", Label: "OpenRouter", Value: "openrouter", Meta: "multi-provider gateway"},
 		{Group: "Providers", Label: "Anthropic", Value: "anthropic", Meta: "Claude models"},
 		{Group: "Providers", Label: "OpenAI", Value: "openai", Meta: "GPT & o-series models"},
-		{Group: "Providers", Label: "DeepSeek", Value: "deepseek", Meta: "V3 & R1 models"},
+		{Group: "Providers", Label: "DeepSeek", Value: "deepseek", Meta: "V4 Pro & Flash models"},
 		{Group: "Providers", Label: "Google AI", Value: "google", Meta: "Gemini models"},
 		{Group: "Providers", Label: "Ollama (Local)", Value: "ollama", Meta: "Local models"},
 		{Group: "Providers", Label: "AIMLAPI", Value: "aimlapi", Meta: "AI/ML API gateway"},
@@ -226,10 +226,10 @@ func (m model) pickerOverlay(width int) string {
 	if width < overlayWidth {
 		overlayWidth = width
 	}
-	innerWidth := overlayWidth - 4
-	if innerWidth < 10 {
-		innerWidth = 10
+	if overlayWidth < 20 {
+		overlayWidth = 20
 	}
+	innerWidth := overlayWidth - 4
 
 	maxVisible := 10
 	totalItems := len(m.picker.items)
@@ -301,21 +301,40 @@ func (m model) pickerOverlay(width int) string {
 	}
 
 	lines = append(lines, zcTheme.line.Render(strings.Repeat("\u2500", innerWidth)))
-	lines = append(lines, zcTheme.faint.Render(fmt.Sprintf("\u2191/\u2193 move  Enter select  Esc close (%d/%d)", m.picker.selected+1, totalItems)))
+	lines = append(lines, zcTheme.faint.Render(fmt.Sprintf(" \u2191/\u2193 move  Enter select  Esc close (%d/%d)", m.picker.selected+1, totalItems)))
 
-	// Box border
-	boxTitle := " " + m.picker.title + " "
-	topRule := zcTheme.lineStrong.Render("\u256d\u2500" + boxTitle + strings.Repeat("\u2500", maxInt(0, innerWidth-lipgloss.Width(boxTitle))))
-	botRule := zcTheme.lineStrong.Render("\u2570" + strings.Repeat("\u2500", innerWidth+1) + "\u256e")
+	title := strings.TrimSpace(m.picker.title)
+	block := styledBlockFillTitle(overlayWidth, title, lines, zcTheme.lineStrong, lipgloss.NewStyle())
+	return centerRenderedBlock(block, width)
+}
 
-	var box []string
-	box = append(box, topRule)
-	for _, l := range lines {
-		box = append(box, zcTheme.lineStrong.Render("\u2502 ")+l+zcTheme.lineStrong.Render(" \u2502"))
+func styledBlockFillTitle(width int, title string, lines []string, borderStyle lipgloss.Style, fill lipgloss.Style) string {
+	if width < 4 {
+		width = 4
 	}
-	box = append(box, botRule)
+	ruleWidth := width - 2
+	titleText := " " + title + " "
+	titleWidth := lipgloss.Width(titleText)
+	if titleWidth >= ruleWidth {
+		titleText = ""
+		titleWidth = 0
+	}
 
-	return centerRenderedBlock(strings.Join(box, "\n"), width)
+	leftRule := "\u2500\u2500"
+	rightRule := strings.Repeat("\u2500", maxInt(0, ruleWidth-lipgloss.Width(leftRule)-titleWidth))
+	top := borderStyle.Render("\u256d"+leftRule) + zcTheme.ink.Bold(true).Render(titleText) + borderStyle.Render(rightRule+"\u256e")
+	bottom := borderStyle.Render("\u2570" + strings.Repeat("\u2500", width-2) + "\u256f")
+
+	body := make([]string, 0, len(lines)+2)
+	body = append(body, top)
+	for _, line := range lines {
+		available := width - 4
+		fitted := fitWidth(line, available)
+		pad := fill.Render(strings.Repeat(" ", maxInt(0, available-lipgloss.Width(fitted))))
+		body = append(body, borderStyle.Render("\u2502 ")+fitted+pad+borderStyle.Render(" \u2502"))
+	}
+	body = append(body, bottom)
+	return strings.Join(body, "\n")
 }
 
 func centerRenderedBlock(block string, width int) string {
