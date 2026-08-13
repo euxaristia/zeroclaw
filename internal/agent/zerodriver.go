@@ -42,7 +42,7 @@ func (ZeroDriver) Doctor(container string) HealthResult {
 	}
 }
 
-func (ZeroDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Event)) (res TurnResult, err error) {
+func buildZeroArgs(opts TurnOptions) []string {
 	args := []string{
 		"exec", "-i", env.Container, "zero", "exec",
 		"--input-format", "stream-json",
@@ -64,7 +64,11 @@ func (ZeroDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Event
 	if opts.NewSessionID != "" {
 		args = append(args, "--init-session-id", opts.NewSessionID)
 	}
+	return args
+}
 
+func (ZeroDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Event)) (res TurnResult, err error) {
+	args := buildZeroArgs(opts)
 	cmd := env.DockerCommandContext(ctx, args...)
 	cmd.Stderr = os.Stderr
 	stdin, pipeErr := cmd.StdinPipe()

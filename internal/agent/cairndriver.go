@@ -38,7 +38,7 @@ func (CairnDriver) Doctor(container string) HealthResult {
 	}
 }
 
-func (CairnDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Event)) (res TurnResult, err error) {
+func buildCairnArgs(opts TurnOptions) []string {
 	args := []string{
 		"exec", "-i", env.Container, "cairn-code", "exec",
 		"--input-format", "stream-json",
@@ -60,7 +60,11 @@ func (CairnDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Even
 	if opts.NewSessionID != "" {
 		args = append(args, "--init-session-id", opts.NewSessionID)
 	}
+	return args
+}
 
+func (CairnDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Event)) (res TurnResult, err error) {
+	args := buildCairnArgs(opts)
 	cmd := env.DockerCommandContext(ctx, args...)
 	cmd.Stderr = os.Stderr
 	stdin, pipeErr := cmd.StdinPipe()

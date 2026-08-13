@@ -42,7 +42,7 @@ type TurnOptions struct {
 	NewSessionID string
 	Prompt       string
 	// Model requests a specific LLM model override for the execution turn.
-	Model        string
+	Model string
 	// Autonomy is low, medium, or high. Inside the container boundary the
 	// daemon will run high; the M0 CLI path defaults to medium.
 	Autonomy string

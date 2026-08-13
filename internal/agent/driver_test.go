@@ -62,11 +62,61 @@ func TestDoctor(t *testing.T) {
 	}
 }
 
-func TestTurnOptionsModel(t *testing.T) {
-	opts := TurnOptions{
-		Model: "gpt-4o",
+func TestDriverModelForwarding(t *testing.T) {
+	tests := []struct {
+		name      string
+		opts      TurnOptions
+		buildArgs func(TurnOptions) []string
+		wantModel string
+		wantHas   bool
+	}{
+		{
+			name:      "zero driver model set",
+			opts:      TurnOptions{Model: "gpt-4o"},
+			buildArgs: buildZeroArgs,
+			wantModel: "gpt-4o",
+			wantHas:   true,
+		},
+		{
+			name:      "zero driver model unset",
+			opts:      TurnOptions{Model: ""},
+			buildArgs: buildZeroArgs,
+			wantHas:   false,
+		},
+		{
+			name:      "cairn driver model set",
+			opts:      TurnOptions{Model: "claude-3-5-sonnet"},
+			buildArgs: buildCairnArgs,
+			wantModel: "claude-3-5-sonnet",
+			wantHas:   true,
+		},
+		{
+			name:      "cairn driver model unset",
+			opts:      TurnOptions{Model: ""},
+			buildArgs: buildCairnArgs,
+			wantHas:   false,
+		},
 	}
-	if opts.Model != "gpt-4o" {
-		t.Errorf("TurnOptions.Model = %q, want %q", opts.Model, "gpt-4o")
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			args := tc.buildArgs(tc.opts)
+			hasModel := false
+			var modelVal string
+			for i, arg := range args {
+				if arg == "--model" && i+1 < len(args) {
+					hasModel = true
+					modelVal = args[i+1]
+					break
+				}
+			}
+
+			if hasModel != tc.wantHas {
+				t.Errorf("hasModel = %v, want %v", hasModel, tc.wantHas)
+			}
+			if tc.wantHas && modelVal != tc.wantModel {
+				t.Errorf("modelVal = %q, want %q", modelVal, tc.wantModel)
+			}
+		})
 	}
 }
