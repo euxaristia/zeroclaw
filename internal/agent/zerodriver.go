@@ -64,20 +64,23 @@ func (ZeroDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Event
 
 	cmd := env.DockerCommandContext(ctx, args...)
 	cmd.Stderr = os.Stderr
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return TurnResult{}, err
+	stdin, pipeErr := cmd.StdinPipe()
+	if pipeErr != nil {
+		return TurnResult{}, pipeErr
 	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return TurnResult{}, err
+	stdout, pipeErr := cmd.StdoutPipe()
+	if pipeErr != nil {
+		_ = stdin.Close()
+		return TurnResult{}, pipeErr
 	}
-	if err := cmd.Start(); err != nil {
-		return TurnResult{}, fmt.Errorf("starting zero exec in container: %w", err)
+	if startErr := cmd.Start(); startErr != nil {
+		_ = stdin.Close()
+		return TurnResult{}, fmt.Errorf("starting zero exec in container: %w", startErr)
 	}
 
+	waited := false
 	defer func() {
-		if err != nil {
+		if !waited || err != nil {
 			_ = stdin.Close()
 			if cmd.Process != nil {
 				_ = cmd.Process.Kill()
@@ -132,9 +135,11 @@ func (ZeroDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Event
 		return
 	}
 	if waitErr := cmd.Wait(); waitErr != nil && res.Status == "" {
+		waited = true
 		err = fmt.Errorf("zero exec failed before run_end: %w", waitErr)
 		return
 	}
+	waited = true
 	if res.Status == "" {
 		err = fmt.Errorf("zero exec ended without a run_end event")
 		return

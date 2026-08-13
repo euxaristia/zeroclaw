@@ -66,14 +66,17 @@ func (CairnDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Even
 	}
 	stdout, pipeErr := cmd.StdoutPipe()
 	if pipeErr != nil {
+		_ = stdin.Close()
 		return TurnResult{}, pipeErr
 	}
 	if startErr := cmd.Start(); startErr != nil {
+		_ = stdin.Close()
 		return TurnResult{}, fmt.Errorf("starting cairn-code exec in container: %w", startErr)
 	}
 
+	waited := false
 	defer func() {
-		if err != nil {
+		if !waited || err != nil {
 			_ = stdin.Close()
 			if cmd.Process != nil {
 				_ = cmd.Process.Kill()
@@ -128,9 +131,11 @@ func (CairnDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Even
 		return
 	}
 	if waitErr := cmd.Wait(); waitErr != nil && res.Status == "" {
+		waited = true
 		err = fmt.Errorf("cairn-code exec failed before run_end: %w", waitErr)
 		return
 	}
+	waited = true
 	if res.Status == "" {
 		err = fmt.Errorf("cairn-code exec ended without a run_end event")
 		return
