@@ -3,6 +3,8 @@ package tui
 import (
 	"context"
 	"testing"
+
+	tea "charm.land/bubbletea/v2"
 )
 
 func TestNewModel(t *testing.T) {
@@ -116,5 +118,63 @@ func TestHistoryNavigation(t *testing.T) {
 	m = m2.(model)
 	if m.input != "current" {
 		t.Errorf("expected draft 'current' after final Down, got %s", m.input)
+	}
+}
+
+func TestPickersAndModelSwitching(t *testing.T) {
+	m := newModel(context.Background(), Options{})
+
+	// Direct /model command
+	m.input = "/model claude-3-5-sonnet-20241022"
+	m2, _ := m.handleSubmit()
+	m = m2.(model)
+	if m.modelName != "claude-3-5-sonnet-20241022" {
+		t.Errorf("expected modelName claude-3-5-sonnet-20241022, got %s", m.modelName)
+	}
+
+	// Direct /provider command
+	m.input = "/provider openrouter"
+	m2, _ = m.handleSubmit()
+	m = m2.(model)
+	if m.providerName != "openrouter" {
+		t.Errorf("expected providerName openrouter, got %s", m.providerName)
+	}
+
+	// Open /model picker
+	m.input = "/model"
+	m2, _ = m.handleSubmit()
+	m = m2.(model)
+	if m.picker == nil || m.picker.kind != pickerModel {
+		t.Fatalf("expected model picker to open")
+	}
+
+	// Filter query in picker
+	m.picker.appendQuery("gpt-4o")
+	if len(m.picker.items) == 0 {
+		t.Fatalf("expected filtered items for query gpt-4o")
+	}
+
+	// Move and select
+	item, ok := m.picker.current()
+	if !ok {
+		t.Fatalf("expected valid item in picker")
+	}
+
+	// Render overlay
+	m.width = 80
+	m.height = 24
+	view := m.View()
+	if view.Content == "" {
+		t.Errorf("expected non-empty view with picker overlay")
+	}
+
+	// Select item via Enter
+	m2, _ = m.handleKey(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	m = m2.(model)
+	if m.picker != nil {
+		t.Errorf("expected picker to close after Enter")
+	}
+	if m.modelName != item.Value {
+		t.Errorf("expected modelName %s, got %s", item.Value, m.modelName)
 	}
 }

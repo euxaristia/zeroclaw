@@ -27,6 +27,7 @@ import (
 type TurnRequest struct {
 	Conversation string `json:"conversation"`
 	Prompt       string `json:"prompt"`
+	Model        string `json:"model,omitempty"`
 	// Autonomy defaults to high: inside the container boundary the agent runs
 	// unattended and there is no user present to answer permission prompts.
 	Autonomy string `json:"autonomy,omitempty"`
@@ -266,6 +267,7 @@ func (s *server) handleTurn(w http.ResponseWriter, r *http.Request) {
 	opts := agent.TurnOptions{
 		SessionID: s.sessions.Get(req.Conversation),
 		Prompt:    req.Prompt,
+		Model:     req.Model,
 		Autonomy:  req.Autonomy,
 		Attended:  true, // /turn callers (chat, exec) have an operator present
 	}

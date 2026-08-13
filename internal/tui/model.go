@@ -58,6 +58,9 @@ type model struct {
 	// Exiting.
 	exiting bool
 
+	// Interactive picker overlay (/model, /provider).
+	picker *commandPicker
+
 	// send delivers messages from background goroutines. Set by Run before
 	// the program starts; unused on the model copy (programSend is the real
 	// delivery path for background streams).
@@ -200,6 +203,53 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	m.exitConfirmActive = false
 
+	// If a picker overlay is open, delegate input to the picker.
+	if m.picker != nil {
+		switch {
+		case msg.Key().Code == tea.KeyEsc:
+			m.picker = nil
+			return m, nil
+		case msg.Key().Code == tea.KeyUp:
+			m.picker.move(-1)
+			return m, nil
+		case msg.Key().Code == tea.KeyDown:
+			m.picker.move(1)
+			return m, nil
+		case msg.Key().Code == tea.KeyEnter:
+			item, ok := m.picker.current()
+			kind := m.picker.kind
+			m.picker = nil
+			if ok {
+				if kind == pickerModel {
+					m.modelName = item.Value
+					if item.Provider != "" {
+						m.providerName = item.Provider
+					}
+					m.transcript = appendTranscriptRow(m.transcript, transcriptRow{
+						kind: rowSystem,
+						text: "Switched model to " + item.Value,
+					})
+				} else if kind == pickerProvider {
+					m.providerName = item.Value
+					m.transcript = appendTranscriptRow(m.transcript, transcriptRow{
+						kind: rowSystem,
+						text: "Switched provider to " + item.Value,
+					})
+					m.picker = m.newModelPicker()
+				}
+			}
+			return m, nil
+		case msg.Key().Code == tea.KeyBackspace:
+			m.picker.deleteQueryRune()
+			return m, nil
+		default:
+			if msg.Key().Text != "" && !msg.Key().Mod.Contains(tea.ModCtrl) && !msg.Key().Mod.Contains(tea.ModAlt) {
+				m.picker.appendQuery(msg.Key().Text)
+			}
+			return m, nil
+		}
+	}
+
 	// While a turn is running, eat input (except Ctrl+C above and scroll).
 	if m.pending {
 		return m.handleScroll(msg)
@@ -257,12 +307,38 @@ func (m model) handleSubmit() (tea.Model, tea.Cmd) {
 	}
 
 	// Slash commands.
-	switch text {
-	case "/quit", "/exit":
+	switch {
+	case text == "/quit" || text == "/exit":
 		return m, tea.Quit
-	case "/clear":
+	case text == "/clear":
 		m.transcript = []transcriptRow{{kind: rowWelcome, text: "zeroclaw. Type /quit to exit."}}
 		m.scrollOffset = 0
+		return m, nil
+	case text == "/model":
+		m.picker = m.newModelPicker()
+		return m, nil
+	case strings.HasPrefix(text, "/model "):
+		arg := strings.TrimSpace(text[7:])
+		if arg != "" {
+			m.modelName = arg
+			m.transcript = appendTranscriptRow(m.transcript, transcriptRow{
+				kind: rowSystem,
+				text: "Switched model to " + arg,
+			})
+		}
+		return m, nil
+	case text == "/provider":
+		m.picker = m.newProviderPicker()
+		return m, nil
+	case strings.HasPrefix(text, "/provider "):
+		arg := strings.TrimSpace(text[10:])
+		if arg != "" {
+			m.providerName = arg
+			m.transcript = appendTranscriptRow(m.transcript, transcriptRow{
+				kind: rowSystem,
+				text: "Switched provider to " + arg,
+			})
+		}
 		return m, nil
 	}
 
@@ -286,6 +362,7 @@ func (m model) handleSubmit() (tea.Model, tea.Cmd) {
 	conv := m.conversation
 	port := m.port
 	token := m.token
+	modelName := m.modelName
 	return m, tea.Batch(
 		m.spinner.Tick,
 		func() tea.Msg {
@@ -293,7 +370,7 @@ func (m model) handleSubmit() (tea.Model, tea.Cmd) {
 			if send == nil {
 				return turnDoneMsg{err: fmt.Errorf("tui not initialized")}
 			}
-			streamTurn(conv, text, port, token, send)
+			streamTurn(conv, text, modelName, port, token, send)
 			return nil
 		},
 	)
@@ -345,6 +422,24 @@ func (m model) View() tea.View {
 	}
 
 	body := m.transcriptBody(bodyHeight)
+
+	if m.picker != nil {
+		overlay := m.pickerOverlay(m.width)
+		oLines := strings.Split(overlay, "\n")
+		padTop := (bodyHeight - len(oLines)) / 2
+		if padTop < 0 {
+			padTop = 0
+		}
+		var centered []string
+		for i := 0; i < padTop; i++ {
+			centered = append(centered, "")
+		}
+		centered = append(centered, oLines...)
+		for len(centered) < bodyHeight {
+			centered = append(centered, "")
+		}
+		body = strings.Join(centered, "\n")
+	}
 
 	content := title + "\n" + body + "\n" + divider + "\n" + inputLine + "\n" + status
 	v := tea.NewView(content)
