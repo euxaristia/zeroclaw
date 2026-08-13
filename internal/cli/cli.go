@@ -1,7 +1,7 @@
 package cli
 
 import (
-	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -10,6 +10,7 @@ import (
 	"zeroclaw/internal/agent"
 	"zeroclaw/internal/daemon"
 	"zeroclaw/internal/env"
+	"zeroclaw/internal/tui"
 )
 
 // version is the released zeroclaw version. Bump on each release.
@@ -248,33 +249,17 @@ func execTurn(conversation, prompt string) error {
 }
 
 func chat(conversation string) error {
-	if _, ok := daemon.Running(); !ok {
+	info, ok := daemon.Running()
+	if !ok {
 		return errors.New("zeroclawd is not running; run `zeroclaw up`")
 	}
-	fmt.Println(badge(" zeroclaw ") + " " + faint("conversation "+conversation+" · /quit to exit"))
-	in := bufio.NewScanner(os.Stdin)
-	for {
-		fmt.Println()
-		fmt.Print(accent("❯ "))
-		if !in.Scan() {
-			fmt.Println()
-			return in.Err()
-		}
-		line := strings.TrimSpace(in.Text())
-		if line == "" {
-			continue
-		}
-		if line == "/quit" || line == "/exit" {
-			return nil
-		}
-		fmt.Println()
-		r := &renderer{}
-		if _, err := turnStream(conversation, line, r.event); err != nil {
-			r.flushText()
-			fmt.Fprintln(os.Stderr, red("✗ "+err.Error()))
-			continue
-		}
-		r.flushText()
-		fmt.Println()
+	code := tui.Run(context.Background(), tui.Options{
+		Conversation: conversation,
+		Port:         info.Port,
+		Token:        info.Token,
+	})
+	if code != 0 {
+		return fmt.Errorf("chat exited with code %d", code)
 	}
+	return nil
 }
