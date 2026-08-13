@@ -106,8 +106,8 @@ func (m model) newModelPicker() *commandPicker {
 		pickerItem{Group: "OpenRouter", Label: "Gemini 2.5 Pro", Value: "google/gemini-2.5-pro", Meta: "2M ctx · reasoning · vision", Provider: "openrouter"},
 		pickerItem{Group: "OpenRouter", Label: "GPT-4o", Value: "openai/gpt-4o", Meta: "128K ctx · tools · vision", Provider: "openrouter"},
 		pickerItem{Group: "OpenRouter", Label: "GPT-4o Mini", Value: "openai/gpt-4o-mini", Meta: "128K ctx · fast · tools", Provider: "openrouter"},
-		pickerItem{Group: "OpenRouter", Label: "DeepSeek Chat (V3)", Value: "deepseek/deepseek-chat", Meta: "64K ctx · tools", Provider: "openrouter"},
-		pickerItem{Group: "OpenRouter", Label: "DeepSeek R1", Value: "deepseek/deepseek-r1", Meta: "64K ctx · reasoning", Provider: "openrouter"},
+		pickerItem{Group: "OpenRouter", Label: "DeepSeek V4 Pro", Value: "deepseek/deepseek-v4-pro", Meta: "128K ctx · tools", Provider: "openrouter"},
+		pickerItem{Group: "OpenRouter", Label: "DeepSeek V4 Flash", Value: "deepseek/deepseek-v4-flash-0731", Meta: "1M ctx · fast · tools", Provider: "openrouter"},
 		pickerItem{Group: "OpenRouter", Label: "Llama 3.3 70B Instruct", Value: "meta-llama/llama-3.3-70b-instruct", Meta: "128K ctx · tools", Provider: "openrouter"},
 	)
 
