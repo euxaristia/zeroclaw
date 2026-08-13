@@ -31,9 +31,8 @@ const usage = `usage: zeroclaw <command>
   doctor                diagnose setup
   auth [sync|login]     manage container zero auth (interactive login or sync host credentials)
   reset-env --force     destroy the environment and the agent's home
-  daemon start|run|stop start zeroclawd in the background / foreground / stop it
-  help [command]        show usage or help for a command
-  version               show zeroclaw version`
+  help, -h, --help [cmd] show usage or help for a command
+  version, -v, --version show zeroclaw version`
 
 // Run dispatches a zeroclaw CLI invocation. Everything except up, doctor, and
 // the env file-copy commands is a thin RPC client of zeroclawd.
