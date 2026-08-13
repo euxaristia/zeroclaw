@@ -145,12 +145,24 @@ func Run(args []string) error {
 type renderer struct {
 	midReasoning bool
 	last         string
+	textBuf      string
+}
+
+func (r *renderer) flushText() {
+	if r.textBuf == "" {
+		return
+	}
+	fmt.Print(FormatMarkdown(r.textBuf))
+	r.textBuf = ""
 }
 
 func (r *renderer) event(ev agent.Event) {
 	if r.midReasoning && ev.Type != "reasoning" {
 		r.midReasoning = false
 		fmt.Fprintln(os.Stderr)
+	}
+	if r.last == "text" && ev.Type != "text" {
+		r.flushText()
 	}
 	switch ev.Type {
 	case "run_start":
@@ -162,7 +174,16 @@ func (r *renderer) event(ev agent.Event) {
 		if r.last == "tool_call" || r.last == "tool_result" {
 			fmt.Fprintln(os.Stderr)
 		}
-		fmt.Print(ev.Delta)
+		r.textBuf += ev.Delta
+		for {
+			idx := strings.IndexByte(r.textBuf, '\n')
+			if idx == -1 {
+				break
+			}
+			line := r.textBuf[:idx+1]
+			fmt.Print(FormatMarkdown(line))
+			r.textBuf = r.textBuf[idx+1:]
+		}
 	case "tool_call":
 		if r.last == "text" {
 			fmt.Println()
@@ -182,7 +203,9 @@ func (r *renderer) event(ev agent.Event) {
 }
 
 func execTurn(conversation, prompt string) error {
-	trailer, err := turnStream(conversation, prompt, (&renderer{}).event)
+	r := &renderer{}
+	trailer, err := turnStream(conversation, prompt, r.event)
+	r.flushText()
 	if err != nil {
 		return err
 	}
@@ -216,10 +239,13 @@ func chat(conversation string) error {
 			return nil
 		}
 		fmt.Println()
-		if _, err := turnStream(conversation, line, (&renderer{}).event); err != nil {
+		r := &renderer{}
+		if _, err := turnStream(conversation, line, r.event); err != nil {
+			r.flushText()
 			fmt.Fprintln(os.Stderr, red("✗ "+err.Error()))
 			continue
 		}
+		r.flushText()
 		fmt.Println()
 	}
 }
