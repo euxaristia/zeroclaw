@@ -301,3 +301,21 @@ func TestPickerBackStackEsc(t *testing.T) {
 		t.Errorf("expected Esc on top-level picker to close overlay")
 	}
 }
+
+func TestHelpCommand(t *testing.T) {
+	m := newModel(context.Background(), Options{Conversation: "conv-test"})
+	m.input = "/help"
+	m2, _ := m.handleSubmit()
+	m = m2.(model)
+
+	foundHelpHeader := false
+	for _, row := range m.transcript {
+		if strings.Contains(row.text, "zeroclaw chat commands:") {
+			foundHelpHeader = true
+			break
+		}
+	}
+	if !foundHelpHeader {
+		t.Errorf("expected /help output in transcript")
+	}
+}
