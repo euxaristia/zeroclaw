@@ -250,3 +250,18 @@ func TestSlashCommandPickerTrigger(t *testing.T) {
 		t.Fatalf("expected model picker to open after selecting /model")
 	}
 }
+
+func TestProviderGatedModelPicker(t *testing.T) {
+	m := newModel(context.Background(), Options{Conversation: "conv-test"})
+	m.providerName = "gitlawb-opengateway"
+
+	picker := m.newModelPicker()
+	if !strings.Contains(picker.title, "gitlawb-opengateway") {
+		t.Errorf("expected title to contain gitlawb-opengateway, got %s", picker.title)
+	}
+	for _, item := range picker.items {
+		if item.Provider != "gitlawb-opengateway" && item.Group != "Active Model" {
+			t.Errorf("unexpected model item from provider %s in gitlawb-opengateway gated picker", item.Provider)
+		}
+	}
+}
