@@ -12,6 +12,7 @@ type pickerKind int
 const (
 	pickerModel pickerKind = iota
 	pickerProvider
+	pickerTheme
 )
 
 type pickerItem struct {
@@ -214,6 +215,31 @@ func (m model) newProviderPicker() *commandPicker {
 		items:    items,
 		allItems: append([]pickerItem{}, items...),
 		selected: selected,
+	}
+}
+
+func (m model) newThemePicker() *commandPicker {
+	var items []pickerItem
+
+	for _, entry := range themeRegistry {
+		group := "Dark Themes"
+		if !entry.IsDark {
+			group = "Light Themes"
+		}
+		items = append(items, pickerItem{
+			Group: group,
+			Label: entry.Label,
+			Value: entry.Name,
+			Meta:  entry.Name,
+		})
+	}
+
+	return &commandPicker{
+		kind:     pickerTheme,
+		title:    "Choose a theme",
+		items:    items,
+		allItems: append([]pickerItem{}, items...),
+		selected: 0,
 	}
 }
 

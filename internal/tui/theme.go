@@ -112,23 +112,4 @@ func buildTheme(p palette) tuiTheme {
 	}
 }
 
-var darkPalette = palette{
-	panel:    "#0e0e10",
-	promptBg: "#262626",
-	line:     "#242429",
-	line2:    "#414147",
-	ink:      "#ececee",
-	muted:    "#9a9aa2",
-	faint:    "#8a8a92",
-	faintest: "#7c7c82",
-	accent:   "#caff3f",
-	green:    "#5dd1a4",
-	red:      "#ff7a7a",
-	amber:    "#ffc25c",
-	blue:     "#7db4ff",
-	onAccent: "#000000",
-	cardRun:  "#5a6b2e",
-	cardErr:  "#6b3434",
-}
-
 var zcTheme = buildTheme(darkPalette)

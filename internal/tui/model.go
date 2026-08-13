@@ -236,6 +236,14 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 						text: "Switched provider to " + item.Value,
 					})
 					m.picker = m.newModelPicker()
+				} else if kind == pickerTheme {
+					if entry, ok := lookupTheme(item.Value); ok {
+						zcTheme = buildTheme(entry.Palette)
+						m.transcript = appendTranscriptRow(m.transcript, transcriptRow{
+							kind: rowSystem,
+							text: "Switched theme to " + entry.Name,
+						})
+					}
 				}
 			}
 			return m, nil
@@ -338,6 +346,26 @@ func (m model) handleSubmit() (tea.Model, tea.Cmd) {
 				kind: rowSystem,
 				text: "Switched provider to " + arg,
 			})
+		}
+		return m, nil
+	case text == "/theme":
+		m.picker = m.newThemePicker()
+		return m, nil
+	case strings.HasPrefix(text, "/theme "):
+		arg := strings.TrimSpace(text[7:])
+		if arg != "" {
+			if entry, ok := lookupTheme(arg); ok {
+				zcTheme = buildTheme(entry.Palette)
+				m.transcript = appendTranscriptRow(m.transcript, transcriptRow{
+					kind: rowSystem,
+					text: "Switched theme to " + entry.Name,
+				})
+			} else {
+				m.transcript = appendTranscriptRow(m.transcript, transcriptRow{
+					kind: rowError,
+					text: "Unknown theme: " + arg,
+				})
+			}
 		}
 		return m, nil
 	}

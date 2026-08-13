@@ -190,3 +190,38 @@ func TestPickersAndModelSwitching(t *testing.T) {
 		t.Errorf("expected modelName %s, got %s", item.Value, m.modelName)
 	}
 }
+
+func TestThemePickerAndSwitching(t *testing.T) {
+	m := newModel(context.Background(), Options{Conversation: "conv-test"})
+
+	// Direct slash command /theme dracula
+	m.input = "/theme dracula"
+	m2, _ := m.handleSubmit()
+	m = m2.(model)
+	if len(m.transcript) == 0 || !strings.Contains(m.transcript[len(m.transcript)-1].text, "dracula") {
+		t.Errorf("expected system message about switching theme to dracula, got %#v", m.transcript)
+	}
+
+	// Interactive theme picker via /theme
+	m.input = "/theme"
+	m2, _ = m.handleSubmit()
+	m = m2.(model)
+	if m.picker == nil || m.picker.kind != pickerTheme {
+		t.Fatalf("expected theme picker to open")
+	}
+	if len(m.picker.items) != len(themeRegistry) {
+		t.Errorf("expected %d theme items, got %d", len(themeRegistry), len(m.picker.items))
+	}
+
+	// Select second theme item (dracula) via Enter
+	m.picker.selected = 1
+	item := m.picker.items[1]
+	m2, _ = m.handleKey(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	m = m2.(model)
+	if m.picker != nil {
+		t.Errorf("expected theme picker to close after Enter")
+	}
+	if len(m.transcript) == 0 || !strings.Contains(m.transcript[len(m.transcript)-1].text, item.Value) {
+		t.Errorf("expected system message for theme %s", item.Value)
+	}
+}
