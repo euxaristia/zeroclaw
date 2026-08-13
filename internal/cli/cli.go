@@ -29,6 +29,7 @@ const usage = `usage: zeroclaw <command>
   take <path> [dest]    copy a file out of the agent's home
   beat                  fire a heartbeat turn now
   doctor                diagnose setup
+  auth [sync|login]     manage container zero auth (interactive login or sync host credentials)
   reset-env --force     destroy the environment and the agent's home
   daemon start|run|stop start zeroclawd in the background / foreground / stop it`
 
@@ -120,6 +121,8 @@ func Run(args []string) error {
 			fmt.Fprintln(os.Stderr, "warning:", err)
 		}
 		return env.Reset()
+	case "auth":
+		return handleAuth(args)
 	case "daemon":
 		if len(args) > 1 && args[1] == "start" {
 			return daemon.Launch()
