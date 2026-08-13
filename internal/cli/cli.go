@@ -22,6 +22,9 @@ const usage = `usage: zeroclaw <command>
   status                daemon and environment state
   chat [conversation]   interactive chat (default conversation: main)
   exec "<prompt>"       one turn in the main conversation
+  race "<prompt>"       run turn concurrently across zero & cairn-code backends
+  visualizer [--watch]  live TUI dashboard of container, daemon & security metrics
+  audit                 run automated security scorecard diagnostics
   give <file>           copy a host file into the agent's ~/incoming
   take <path> [dest]    copy a file out of the agent's home
   beat                  fire a heartbeat turn now
@@ -70,6 +73,17 @@ func Run(args []string) error {
 		}
 		fmt.Println("FAIL zeroclawd responding (zeroclaw up)")
 		return nil
+	case "audit":
+		return env.Audit(os.Stdout)
+	case "race":
+		prompt := strings.TrimSpace(strings.Join(args[1:], " "))
+		if prompt == "" {
+			return errors.New(`usage: zeroclaw race "<prompt>"`)
+		}
+		return RunRace(os.Stdout, prompt, []string{"zero", "cairn-code"})
+	case "visualizer", "dashboard":
+		watch := len(args) > 1 && (args[1] == "--watch" || args[1] == "-w")
+		return RunVisualizer(os.Stdout, watch)
 	case "exec":
 		prompt := strings.TrimSpace(strings.Join(args[1:], " "))
 		if prompt == "" {

@@ -119,6 +119,9 @@ zeroclaw down                  stop zeroclawd + environment
 zeroclaw status                daemon and environment state
 zeroclaw chat [conversation]   interactive chat (default: main)
 zeroclaw exec "<prompt>"       one turn in the main conversation
+zeroclaw race "<prompt>"       run turn concurrently across zero & cairn-code backends
+zeroclaw visualizer [--watch]  live TUI dashboard of container, daemon & security metrics
+zeroclaw audit                 run automated security scorecard diagnostics
 zeroclaw beat                  fire a heartbeat turn now
 zeroclaw give <file>           copy a host file into the agent's ~/incoming
 zeroclaw take <path> [dest]    copy a file out of the agent's home
