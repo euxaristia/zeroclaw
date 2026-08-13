@@ -43,12 +43,16 @@ func (ZeroDriver) Doctor(container string) HealthResult {
 }
 
 func buildZeroArgs(opts TurnOptions) []string {
-	args := []string{
-		"exec", "-i", env.Container, "zero", "exec",
+	args := []string{"exec"}
+	if opts.Provider != "" {
+		args = append(args, "-e", "ZERO_PROVIDER="+opts.Provider)
+	}
+	args = append(args,
+		"-i", env.Container, "zero", "exec",
 		"--input-format", "stream-json",
 		"--output-format", "stream-json",
 		"-C", workspace,
-	}
+	)
 	if opts.Model != "" {
 		args = append(args, "--model", opts.Model)
 	}
