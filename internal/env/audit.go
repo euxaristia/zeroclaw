@@ -226,44 +226,66 @@ func RunAudit() AuditReport {
 	}
 }
 
+func paint(code, s string) string {
+	if os.Getenv("NO_COLOR") != "" || s == "" {
+		return s
+	}
+	return "\x1b[" + code + "m" + s + "\x1b[0m"
+}
+
+func bold(s string) string          { return paint("1", s) }
+func lime(s string) string          { return paint("1;38;2;202;255;63", s) }
+func green(s string) string         { return paint("1;38;2;93;209;164", s) }
+func yellow(s string) string        { return paint("1;38;2;255;198;88", s) }
+func red(s string) string           { return paint("1;38;2;255;122;122", s) }
+func faint(s string) string         { return paint("38;2;124;124;130", s) }
+func categoryStyle(s string) string { return paint("1;38;2;180;180;190", s) }
+
 // Audit formats and writes the security audit scorecard report to w.
 func Audit(w io.Writer) error {
 	report := RunAudit()
 
-	fmt.Fprintln(w, "==================================================================")
-	fmt.Fprintln(w, "                 ZEROCLAW SECURITY AUDIT SCORECARD                ")
-	fmt.Fprintln(w, "==================================================================")
-	fmt.Fprintf(w, " Timestamp : %s\n", report.Timestamp.Format(time.RFC3339))
-	fmt.Fprintf(w, " Score     : %d/100 (Grade: %s)\n", report.Score, report.Grade)
-	fmt.Fprintln(w, "------------------------------------------------------------------")
+	scoreColor := green
+	if report.Score < 80 {
+		scoreColor = red
+	} else if report.Score < 90 {
+		scoreColor = yellow
+	}
+
+	fmt.Fprintln(w, lime("=================================================================="))
+	fmt.Fprintln(w, lime("                 ZEROCLAW SECURITY AUDIT SCORECARD                "))
+	fmt.Fprintln(w, lime("=================================================================="))
+	fmt.Fprintf(w, " %s : %s\n", faint("Timestamp"), report.Timestamp.Format(time.RFC3339))
+	fmt.Fprintf(w, " %s     : %s\n", faint("Score"), scoreColor(fmt.Sprintf("%d/100 (Grade: %s)", report.Score, report.Grade)))
+	fmt.Fprintln(w, faint("------------------------------------------------------------------"))
 
 	category := ""
 	for _, item := range report.Items {
 		if item.Category != category {
 			category = item.Category
-			fmt.Fprintf(w, "\n[%s]\n", category)
+			fmt.Fprintf(w, "\n%s\n", categoryStyle("["+category+"]"))
 		}
 
-		statusMark := "[PASS]"
+		statusMark := green("[PASS]")
 		if item.Status == StatusFail {
-			statusMark = "[FAIL]"
+			statusMark = red("[FAIL]")
 		} else if item.Status == StatusWarn {
-			statusMark = "[WARN]"
+			statusMark = yellow("[WARN]")
 		}
 
-		fmt.Fprintf(w, "  %-6s %s\n", statusMark, item.Name)
-		fmt.Fprintf(w, "         Detail: %s\n", item.Detail)
+		fmt.Fprintf(w, "  %-6s %s\n", statusMark, bold(item.Name))
+		fmt.Fprintf(w, "         %s %s\n", faint("Detail:"), item.Detail)
 		if item.Hint != "" && item.Status != StatusPass {
-			fmt.Fprintf(w, "         Hint  : %s\n", item.Hint)
+			fmt.Fprintf(w, "         %s %s\n", yellow("Hint  :"), item.Hint)
 		}
 	}
 
-	fmt.Fprintln(w, "\n==================================================================")
+	fmt.Fprintln(w, "\n"+lime("=================================================================="))
 	if report.Score >= 90 {
-		fmt.Fprintln(w, " STATUS: Hardened & Secure Container Environment")
+		fmt.Fprintln(w, green(" STATUS: Hardened & Secure Container Environment"))
 	} else {
-		fmt.Fprintln(w, " STATUS: Security Attention Recommended")
+		fmt.Fprintln(w, yellow(" STATUS: Security Attention Recommended"))
 	}
-	fmt.Fprintln(w, "==================================================================")
+	fmt.Fprintln(w, lime("=================================================================="))
 	return nil
 }
