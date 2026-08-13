@@ -71,10 +71,11 @@ var streamClient = &http.Client{
 // streamTurn POSTs a turn to zeroclawd and relays each NDJSON event as a
 // tea.Msg via send. It blocks until the stream ends and always finishes with
 // a turnDoneMsg.
-func streamTurn(conversation, prompt, model string, port int, token string, send func(tea.Msg)) {
+func streamTurn(conversation, prompt, provider, model string, port int, token string, send func(tea.Msg)) {
 	body, err := json.Marshal(daemon.TurnRequest{
 		Conversation: conversation,
 		Prompt:       prompt,
+		Provider:     provider,
 		Model:        model,
 	})
 	if err != nil {

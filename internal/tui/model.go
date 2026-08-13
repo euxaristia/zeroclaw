@@ -362,6 +362,7 @@ func (m model) handleSubmit() (tea.Model, tea.Cmd) {
 	conv := m.conversation
 	port := m.port
 	token := m.token
+	providerName := m.providerName
 	modelName := m.modelName
 	return m, tea.Batch(
 		m.spinner.Tick,
@@ -370,7 +371,7 @@ func (m model) handleSubmit() (tea.Model, tea.Cmd) {
 			if send == nil {
 				return turnDoneMsg{err: fmt.Errorf("tui not initialized")}
 			}
-			streamTurn(conv, text, modelName, port, token, send)
+			streamTurn(conv, text, providerName, modelName, port, token, send)
 			return nil
 		},
 	)

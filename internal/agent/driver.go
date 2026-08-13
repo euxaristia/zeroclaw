@@ -41,6 +41,8 @@ type TurnOptions struct {
 	// zeroclaw owns the conversation-to-session mapping.
 	NewSessionID string
 	Prompt       string
+	// Provider requests a specific provider profile override for the turn.
+	Provider string
 	// Model requests a specific LLM model override for the execution turn.
 	Model string
 	// Autonomy is low, medium, or high. Inside the container boundary the
