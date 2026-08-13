@@ -31,6 +31,7 @@ type commandPicker struct {
 	allItems []pickerItem
 	query    string
 	selected int
+	prev     *commandPicker
 }
 
 func (p *commandPicker) move(delta int) {
@@ -102,7 +103,7 @@ func (m model) newModelPicker() *commandPicker {
 
 	// OpenRouter
 	allItems = append(allItems,
-		pickerItem{Group: "OpenRouter", Label: "DeepSeek V4 Pro", Value: "deepseek/deepseek-v4-pro", Meta: "128K ctx · tools", Provider: "openrouter"},
+		pickerItem{Group: "OpenRouter", Label: "DeepSeek V4 Pro", Value: "deepseek/deepseek-v4-pro", Meta: "1M ctx · tools", Provider: "openrouter"},
 		pickerItem{Group: "OpenRouter", Label: "DeepSeek V4 Flash", Value: "deepseek/deepseek-v4-flash-0731", Meta: "1M ctx · fast · tools", Provider: "openrouter"},
 		pickerItem{Group: "OpenRouter", Label: "Claude 3.5 Sonnet", Value: "anthropic/claude-3.5-sonnet", Meta: "200K ctx · tools · vision", Provider: "openrouter"},
 		pickerItem{Group: "OpenRouter", Label: "Claude 3.5 Haiku", Value: "anthropic/claude-3.5-haiku", Meta: "200K ctx · fast · tools", Provider: "openrouter"},
@@ -130,8 +131,8 @@ func (m model) newModelPicker() *commandPicker {
 
 	// DeepSeek Direct
 	allItems = append(allItems,
-		pickerItem{Group: "DeepSeek", Label: "DeepSeek V4 Pro", Value: "deepseek-chat", Meta: "128K ctx · tools", Provider: "deepseek"},
-		pickerItem{Group: "DeepSeek", Label: "DeepSeek V4 Flash", Value: "deepseek-reasoner", Meta: "128K ctx · fast · reasoning", Provider: "deepseek"},
+		pickerItem{Group: "DeepSeek", Label: "DeepSeek V4 Pro", Value: "deepseek-chat", Meta: "1M ctx · tools", Provider: "deepseek"},
+		pickerItem{Group: "DeepSeek", Label: "DeepSeek V4 Flash", Value: "deepseek-reasoner", Meta: "1M ctx · fast · reasoning", Provider: "deepseek"},
 	)
 
 	// Google Direct
@@ -147,10 +148,16 @@ func (m model) newModelPicker() *commandPicker {
 		pickerItem{Group: "Ollama (Local)", Label: "DeepSeek R1 Distill 32B", Value: "deepseek-r1", Meta: "local · reasoning", Provider: "ollama"},
 	)
 
-	// Provider gating: if an active provider is set, restrict models to that provider
+	// Provider gating: if an active provider is set, check fetchedModels first, or filter allItems
 	activeProvider := strings.TrimSpace(m.providerName)
+	if activeProvider == "" {
+		activeProvider = "gitlawb-opengateway"
+	}
+
 	var items []pickerItem
-	if activeProvider != "" {
+	if fetched, ok := m.fetchedModels[activeProvider]; ok && len(fetched) > 0 {
+		items = append([]pickerItem{}, fetched...)
+	} else if activeProvider != "" {
 		for _, item := range allItems {
 			if strings.EqualFold(item.Provider, activeProvider) {
 				items = append(items, item)
