@@ -1,6 +1,11 @@
 package cli
 
-import "testing"
+import (
+	"bytes"
+	"io"
+	"os"
+	"testing"
+)
 
 // These tests cover the argument-validation branches of Run that never touch
 // Docker, the daemon, or the network. The operational commands (up, down,
@@ -78,21 +83,82 @@ func TestRunDaemonArgCount(t *testing.T) {
 }
 
 func TestRunHelp(t *testing.T) {
-	if err := Run([]string{"help"}); err != nil {
-		t.Errorf("Run([help]) returned error %v, want nil", err)
+	tests := []struct {
+		name       string
+		args       []string
+		wantSubstr string
+	}{
+		{name: "help command", args: []string{"help"}, wantSubstr: "usage: zeroclaw <command>"},
+		{name: "short help flag", args: []string{"-h"}, wantSubstr: "usage: zeroclaw <command>"},
+		{name: "long help flag", args: []string{"--help"}, wantSubstr: "usage: zeroclaw <command>"},
+		{name: "contextual help auth", args: []string{"help", "auth"}, wantSubstr: "usage: zeroclaw auth [sync|login]"},
+		{name: "contextual help daemon", args: []string{"help", "daemon"}, wantSubstr: "usage: zeroclaw daemon start|run|stop"},
+		{name: "contextual help give", args: []string{"help", "give"}, wantSubstr: "usage: zeroclaw give <file>"},
+		{name: "contextual help take", args: []string{"help", "take"}, wantSubstr: "usage: zeroclaw take <path> [dest]"},
+		{name: "contextual help exec", args: []string{"help", "exec"}, wantSubstr: `usage: zeroclaw exec "<prompt>"`},
+		{name: "contextual help race", args: []string{"help", "race"}, wantSubstr: `usage: zeroclaw race "<prompt>"`},
+		{name: "contextual help reset-env", args: []string{"help", "reset-env"}, wantSubstr: "usage: zeroclaw reset-env --force"},
 	}
-	if err := Run([]string{"--help"}); err != nil {
-		t.Errorf("Run([--help]) returned error %v, want nil", err)
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			out := captureStdout(t, func() {
+				if err := Run(tc.args); err != nil {
+					t.Errorf("Run(%v) returned error %v, want nil", tc.args, err)
+				}
+			})
+			if !contains(out, tc.wantSubstr) {
+				t.Errorf("Run(%v) printed %q, want substring %q", tc.args, out, tc.wantSubstr)
+			}
+		})
 	}
 }
 
 func TestRunVersion(t *testing.T) {
-	if err := Run([]string{"version"}); err != nil {
-		t.Errorf("Run([version]) returned error %v, want nil", err)
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "version command", args: []string{"version"}},
+		{name: "short version flag", args: []string{"-v"}},
+		{name: "long version flag", args: []string{"--version"}},
 	}
-	if err := Run([]string{"--version"}); err != nil {
-		t.Errorf("Run([--version]) returned error %v, want nil", err)
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			out := captureStdout(t, func() {
+				if err := Run(tc.args); err != nil {
+					t.Errorf("Run(%v) returned error %v, want nil", tc.args, err)
+				}
+			})
+			if !contains(out, "zeroclaw") {
+				t.Errorf("Run(%v) printed %q, want substring zeroclaw", tc.args, out)
+			}
+		})
 	}
+}
+
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe() failed: %v", err)
+	}
+	os.Stdout = w
+
+	outC := make(chan string)
+	go func() {
+		var buf bytes.Buffer
+		_, _ = io.Copy(&buf, r)
+		outC <- buf.String()
+	}()
+
+	fn()
+
+	_ = w.Close()
+	os.Stdout = old
+	return <-outC
 }
 
 func TestRunAuthUsage(t *testing.T) {

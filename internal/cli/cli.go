@@ -31,7 +31,8 @@ const usage = `usage: zeroclaw <command>
   doctor                diagnose setup
   auth [sync|login]     manage container zero auth (interactive login or sync host credentials)
   reset-env --force     destroy the environment and the agent's home
-  daemon start|run|stop start zeroclawd in the background / foreground / stop it`
+  help, -h, --help [cmd] show usage or help for a command
+  version, -v, --version show zeroclaw version`
 
 // Run dispatches a zeroclaw CLI invocation. Everything except up, doctor, and
 // the env file-copy commands is a thin RPC client of zeroclawd.
@@ -40,10 +41,35 @@ func Run(args []string) error {
 		return errors.New(usage)
 	}
 	switch args[0] {
-	case "help", "--help":
+	case "help", "-h", "--help":
+		if len(args) > 1 {
+			switch args[1] {
+			case "auth":
+				fmt.Println("usage: zeroclaw auth [sync|login]")
+				return nil
+			case "daemon":
+				fmt.Println("usage: zeroclaw daemon start|run|stop")
+				return nil
+			case "give":
+				fmt.Println("usage: zeroclaw give <file>")
+				return nil
+			case "take":
+				fmt.Println("usage: zeroclaw take <path> [dest]")
+				return nil
+			case "exec":
+				fmt.Println(`usage: zeroclaw exec "<prompt>"`)
+				return nil
+			case "race":
+				fmt.Println(`usage: zeroclaw race "<prompt>"`)
+				return nil
+			case "reset-env":
+				fmt.Println("usage: zeroclaw reset-env --force")
+				return nil
+			}
+		}
 		fmt.Println(usage)
 		return nil
-	case "version", "--version":
+	case "version", "-v", "--version":
 		fmt.Println("zeroclaw", version)
 		return nil
 	case "up":
