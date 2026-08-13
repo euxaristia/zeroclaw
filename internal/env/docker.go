@@ -42,9 +42,20 @@ func isLinuxAMD64(path string) bool {
 	return f.Machine == elf.EM_X86_64
 }
 
-func docker(args ...string) (string, error) {
-	cmd := exec.Command("docker", args...)
+func dockerCmd(ctx context.Context, args ...string) *exec.Cmd {
+	var cmd *exec.Cmd
+	if ctx != nil {
+		cmd = exec.CommandContext(ctx, "docker", args...)
+	} else {
+		cmd = exec.Command("docker", args...)
+	}
 	hideConsole(cmd)
+	cmd.Env = append(os.Environ(), "DOCKER_CLI_HINTS=false")
+	return cmd
+}
+
+func docker(args ...string) (string, error) {
+	cmd := dockerCmd(nil, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("docker %s: %w\n%s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
@@ -53,8 +64,7 @@ func docker(args ...string) (string, error) {
 }
 
 func dockerOK(args ...string) bool {
-	cmd := exec.Command("docker", args...)
-	hideConsole(cmd)
+	cmd := dockerCmd(nil, args...)
 	cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
 	return cmd.Run() == nil
 }
@@ -63,9 +73,7 @@ func dockerOK(args ...string) bool {
 // stream stdio themselves (the agent driver). It keeps "how we reach the
 // environment" in one package.
 func DockerCommandContext(ctx context.Context, args ...string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, "docker", args...)
-	hideConsole(cmd)
-	return cmd
+	return dockerCmd(ctx, args...)
 }
 
 func EngineReady() error {
@@ -204,6 +212,66 @@ func adoptZeroAuth() error {
 	// docker cp writes as root; hand the files to the agent user.
 	_, err = docker("exec", "-u", "root", Container, "chown", "-R", "zeroclaw:zeroclaw", Home+"/.config/zero")
 	return err
+}
+
+// SyncAuth explicitly copies the host zero provider config and encrypted credential
+// store into the agent's volume, overwriting container zero auth files if present.
+func SyncAuth() error {
+	hostCfg, err := os.UserConfigDir()
+	if err != nil {
+		return fmt.Errorf("getting user config dir: %w", err)
+	}
+	src := filepath.Join(hostCfg, "zero")
+	copied := 0
+	for _, f := range []string{"config.json", "credentials.enc", "credentials.enc.secret"} {
+		p := filepath.Join(src, f)
+		if !fileExists(p) {
+			continue
+		}
+		if _, err := docker("cp", p, Container+":"+Home+"/.config/zero/"+f); err != nil {
+			return fmt.Errorf("copying %s: %w", f, err)
+		}
+		copied++
+		fmt.Println("synced host zero", f)
+	}
+	if copied == 0 {
+		return fmt.Errorf("no host zero configuration found in %s", src)
+	}
+	if _, err := docker("exec", "-u", "root", Container, "chown", "-R", "zeroclaw:zeroclaw", Home+"/.config/zero"); err != nil {
+		return fmt.Errorf("chown zero config: %w", err)
+	}
+	return allowSandboxNetwork()
+}
+
+func isTerminal(f *os.File) bool {
+	stat, err := f.Stat()
+	if err != nil {
+		return false
+	}
+	return (stat.Mode() & os.ModeCharDevice) != 0
+}
+
+// InteractiveAuth launches an interactive zero setup or zero auth session inside the container.
+func InteractiveAuth(args []string) error {
+	if len(args) > 0 && args[0] == "sync" {
+		return SyncAuth()
+	}
+	execFlags := "-i"
+	if isTerminal(os.Stdin) {
+		execFlags = "-it"
+	}
+	var zeroCmd []string
+	if len(args) == 0 {
+		zeroCmd = []string{"exec", execFlags, Container, "zero", "setup"}
+	} else {
+		zeroCmd = append([]string{"exec", execFlags, Container, "zero", "auth"}, args...)
+	}
+	cmd := exec.Command("docker", zeroCmd...)
+	cmd.Env = append(os.Environ(), "DOCKER_CLI_HINTS=false")
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 // Give copies a host file into the agent's ~/incoming. This and Take are the

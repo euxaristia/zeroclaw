@@ -223,6 +223,7 @@ are done and shipped. Remaining hardening items, none started:
 ## Ground rules for working on this repo
 
 - Never bind-mount host paths into the container.
+- Strict Boundary Preservation & Security Integrity: Never scrape, forward, or leak host process environment variables (`os.Environ()`), host credentials, or arbitrary host filesystem paths into container executions (`docker exec`). Never weaken container isolation or invent implicit host fallbacks to patch runtime/auth errors. Operational and credential issues must always be solved through explicit, user-triggered CLI tools or container control-plane interfaces.
 - Zero is consumed as a released binary in the image; never modify the zero repo
   from this project. Changes zero needs go through its own repo and PR process.
 - Minimal deps, early returns, no em dashes in any authored text. Go idioms over

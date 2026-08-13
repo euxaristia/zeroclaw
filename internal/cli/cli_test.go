@@ -95,6 +95,12 @@ func TestRunVersion(t *testing.T) {
 	}
 }
 
+func TestRunAuthUsage(t *testing.T) {
+	if err := Run([]string{"auth", "invalid"}); err == nil {
+		t.Error("Run([auth, invalid]) returned nil error, want usage error")
+	}
+}
+
 func contains(haystack, needle string) bool {
 	for i := 0; i+len(needle) <= len(haystack); i++ {
 		if haystack[i:i+len(needle)] == needle {
