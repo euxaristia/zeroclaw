@@ -376,6 +376,23 @@ func (m model) executeSlashCommandWithPrev(text string, prev *commandPicker) (mo
 		m.transcript = []transcriptRow{{kind: rowWelcome, text: "zeroclaw. Type /quit to exit."}}
 		m.scrollOffset = 0
 		return m, nil
+	case text == "/help" || text == "/?" || text == "/h":
+		helpLines := []string{
+			"zeroclaw chat commands:",
+			"  /model [name]      Choose or switch active LLM model",
+			"  /provider [name]   Choose or switch model provider",
+			"  /theme [name]      Choose or preview UI color theme",
+			"  /help              Show available commands",
+			"  /clear             Clear chat transcript",
+			"  /quit, /exit       Exit zeroclaw chat",
+		}
+		for _, line := range helpLines {
+			m.transcript = appendTranscriptRow(m.transcript, transcriptRow{
+				kind: rowSystem,
+				text: line,
+			})
+		}
+		return m, nil
 	case text == "/model":
 		return m.openModelPickerWithPrev(prev)
 	case strings.HasPrefix(text, "/model "):
