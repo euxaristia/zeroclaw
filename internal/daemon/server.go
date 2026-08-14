@@ -157,6 +157,7 @@ func RunServer(agentNameOpt ...string) error {
 	mux.Handle("GET /providers", s.auth(http.HandlerFunc(s.handleProviders)))
 	mux.Handle("GET /models", s.auth(http.HandlerFunc(s.handleModels)))
 	mux.Handle("POST /turn", s.auth(http.HandlerFunc(s.handleTurn)))
+	mux.Handle("DELETE /conversations/{name}", s.auth(http.HandlerFunc(s.handleDeleteConversation)))
 	mux.Handle("POST /beat", s.auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		go s.runScheduled(schedCtx, "heartbeat", heartbeatPrompt)
 		w.WriteHeader(http.StatusAccepted)
@@ -291,6 +292,28 @@ func (s *server) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handleConversations(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(s.sessions.All())
+}
+
+// handleDeleteConversation drops a conversation's session mapping so the
+// next turn starts a fresh backend session, the same reset Telegram's /new
+// performs. The stored session itself is left alone; only the mapping goes,
+// so nothing the agent wrote is destroyed.
+func (s *server) handleDeleteConversation(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" {
+		http.Error(w, "conversation name required", http.StatusBadRequest)
+		return
+	}
+	// Hold the conversation lock so a reset cannot land midway through a
+	// turn that is about to persist its own session id.
+	lock := s.convLock(name)
+	lock.Lock()
+	defer lock.Unlock()
+	if err := s.DeleteConversation(name); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *server) handleProviders(w http.ResponseWriter, r *http.Request) {

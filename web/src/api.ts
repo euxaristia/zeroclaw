@@ -87,6 +87,20 @@ export async function fetchConversations(token: string): Promise<Record<string, 
   return resp.json();
 }
 
+// Drops the conversation's session mapping so the next turn starts fresh.
+export async function resetConversation(token: string, conversation: string): Promise<void> {
+  const resp = await fetch(`/conversations/${encodeURIComponent(conversation)}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  if (!resp.ok) throw new Error(`reset failed: ${resp.status}`);
+}
+
+export async function fireHeartbeat(token: string): Promise<void> {
+  const resp = await fetch("/beat", { method: "POST", headers: authHeaders(token) });
+  if (!resp.ok) throw new Error(`heartbeat failed: ${resp.status}`);
+}
+
 export async function fetchProviders(token: string): Promise<CatalogItem[]> {
   const resp = await fetch("/providers", { headers: authHeaders(token) });
   if (!resp.ok) throw new Error(`providers request failed: ${resp.status}`);

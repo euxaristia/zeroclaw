@@ -4,6 +4,8 @@ import {
   fetchProviders,
   fetchModels,
   fetchConversations,
+  resetConversation,
+  fireHeartbeat,
   streamTurn,
   type AgentEvent,
   type CatalogItem,
@@ -275,6 +277,85 @@ async function handleSlashCommand(text: string): Promise<boolean> {
     if (picked) switchConversation(picked.value);
     return true;
   }
+  // /new mirrors the reset Telegram's /new performs: the backend session
+  // mapping is dropped so the next turn starts with no context, and the
+  // visible transcript is cleared to match.
+  if (text === "/new") {
+    try {
+      await resetConversation(authToken, activeConversation);
+    } catch (err) {
+      fail(err instanceof Error ? err.message : String(err));
+      return true;
+    }
+    transcript.replaceChildren();
+    appendBlock("welcome").textContent = welcomeText;
+    setSession("");
+    saveTranscript();
+    systemMessage(`Conversation reset. ${activeConversation} starts fresh.`);
+    return true;
+  }
+  if (text === "/stop") {
+    if (inFlight) {
+      inFlight.abort();
+    } else {
+      systemMessage("Nothing running.");
+    }
+    return true;
+  }
+  // /retry resends the last prompt rather than making you retype it. Slash
+  // commands were never recorded in history, so this can only pick up a
+  // real prompt.
+  if (text === "/retry") {
+    const last = inputHistory[inputHistory.length - 1];
+    if (!last) {
+      systemMessage("No previous prompt to retry.");
+      return true;
+    }
+    promptInput.value = last;
+    autoGrow();
+    void sendTurn();
+    return true;
+  }
+  if (text === "/copy") {
+    const replies = transcript.querySelectorAll(".block.reply");
+    const last = replies[replies.length - 1];
+    if (!last?.textContent) {
+      systemMessage("No reply to copy.");
+      return true;
+    }
+    try {
+      await navigator.clipboard.writeText(last.textContent);
+      systemMessage("Copied the last reply to the clipboard.");
+    } catch {
+      // Clipboard access needs a secure context or permission; say so
+      // rather than failing silently.
+      fail("Could not access the clipboard.");
+    }
+    return true;
+  }
+  // /export hands the transcript over as a file. The page is sandboxed
+  // enough that a blob download is the only way out of the tab.
+  if (text === "/export") {
+    const lines = Array.from(transcript.children).map((el) => el.textContent ?? "");
+    const blob = new Blob([lines.join("\n\n")], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `zeroclaw-${activeConversation}-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    systemMessage("Exported the transcript.");
+    return true;
+  }
+  if (text === "/beat") {
+    try {
+      await fireHeartbeat(authToken);
+      systemMessage("Heartbeat fired. It runs in its own conversation; watch the daemon log.");
+    } catch (err) {
+      fail(err instanceof Error ? err.message : String(err));
+    }
+    return true;
+  }
   if (text === "/status") {
     try {
       const s = await fetchStatus(authToken);
@@ -385,6 +466,12 @@ const COMMANDS: CatalogItem[] = [
   { group: "Commands", label: "/conversation", value: "/conversation", meta: "Switch conversation", provider: "" },
   { group: "Commands", label: "/theme", value: "/theme", meta: "Choose a UI colour theme", provider: "" },
   { group: "Commands", label: "/status", value: "/status", meta: "Show agent, container, and model", provider: "" },
+  { group: "Commands", label: "/new", value: "/new", meta: "Reset this conversation's session", provider: "" },
+  { group: "Commands", label: "/retry", value: "/retry", meta: "Resend the last prompt", provider: "" },
+  { group: "Commands", label: "/stop", value: "/stop", meta: "Cancel the running turn", provider: "" },
+  { group: "Commands", label: "/copy", value: "/copy", meta: "Copy the last reply", provider: "" },
+  { group: "Commands", label: "/export", value: "/export", meta: "Download the transcript", provider: "" },
+  { group: "Commands", label: "/beat", value: "/beat", meta: "Fire a heartbeat turn now", provider: "" },
   { group: "Commands", label: "/help", value: "/help", meta: "Show available commands", provider: "" },
   { group: "Commands", label: "/clear", value: "/clear", meta: "Clear chat transcript", provider: "" },
 ];

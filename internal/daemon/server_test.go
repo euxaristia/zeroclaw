@@ -186,6 +186,38 @@ func TestHandleStatusOmitsDefaultsOnError(t *testing.T) {
 	}
 }
 
+func TestHandleDeleteConversation(t *testing.T) {
+	s := newTestServer()
+	s.sessions = mustSessionStore(t)
+	if err := s.sessions.Set("main", "sess-1"); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, "/conversations/main", nil)
+	req.SetPathValue("name", "main")
+	s.handleDeleteConversation(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("delete status = %d, want 204", rec.Code)
+	}
+	if got := s.sessions.Get("main"); got != "" {
+		t.Errorf("session still mapped after reset: %q", got)
+	}
+}
+
+func TestHandleDeleteConversationRequiresName(t *testing.T) {
+	s := newTestServer()
+	s.sessions = mustSessionStore(t)
+
+	rec := httptest.NewRecorder()
+	s.handleDeleteConversation(rec, httptest.NewRequest(http.MethodDelete, "/conversations/", nil))
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("delete without a name = %d, want 400", rec.Code)
+	}
+}
+
 func TestHandleConversations(t *testing.T) {
 	s := newTestServer()
 	s.sessions = mustSessionStore(t)
