@@ -4,6 +4,7 @@ import (
 	"embed"
 	"io/fs"
 	"net/http"
+	"os"
 )
 
 // webdist holds the built web UI (web/ built with Bun, see web/package.json).
@@ -22,12 +23,23 @@ var webdist embed.FS
 // without the bearer token. The shell carries no agent data; the token
 // travels in the launch URL's query string instead and every API call the
 // page makes afterward still goes through s.auth like any other client.
+//
+// If ZEROCLAW_WEB_DIR is set, it serves straight off that directory on disk
+// instead of the embedded copy, so `bun run build` + a browser refresh picks
+// up web/ changes without restarting zeroclawd. Unset (the default) always
+// uses the embedded build, matching a normal install.
 func webUIHandler() (http.Handler, error) {
+	if dir := os.Getenv("ZEROCLAW_WEB_DIR"); dir != "" {
+		return decoratedFileServer(http.FileServer(http.Dir(dir))), nil
+	}
 	sub, err := fs.Sub(webdist, "webdist")
 	if err != nil {
 		return nil, err
 	}
-	fileServer := http.FileServer(http.FS(sub))
+	return decoratedFileServer(http.FileServer(http.FS(sub))), nil
+}
+
+func decoratedFileServer(fileServer http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
@@ -35,5 +47,5 @@ func webUIHandler() (http.Handler, error) {
 		// its own script and stylesheet and call back into this same origin.
 		w.Header().Set("Content-Security-Policy", "default-src 'self'")
 		fileServer.ServeHTTP(w, r)
-	}), nil
+	})
 }
