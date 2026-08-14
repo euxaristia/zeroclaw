@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -16,8 +17,9 @@ import (
 // version is the released zeroclaw version. Bump on each release.
 const version = "0.1.0"
 
-const usage = `usage: zeroclaw <command>
+const usage = `usage: zeroclaw [-a <agent>] <command>
 
+  list                  list all available zeroclaw agent profiles and status
   up                    start environment + zeroclawd
   down                  stop zeroclawd + environment
   status                daemon and environment state
@@ -31,13 +33,44 @@ const usage = `usage: zeroclaw <command>
   beat                  fire a heartbeat turn now
   doctor                diagnose setup
   auth [sync|login]     manage container zero auth (interactive login or sync host credentials)
+  reset-container       remove disposable container (preserves volume & home data)
   reset-env --force     destroy the environment and the agent's home
   help, -h, --help [cmd] show usage or help for a command
-  version, -v, --version show zeroclaw version`
+  version, -v, --version show zeroclaw version
+
+Options:
+  -a, --agent <name>    select agent profile (default: default, env: ZEROCLAW_AGENT)`
+
+func parseAgentAndArgs(args []string) (string, []string) {
+	agentName := os.Getenv("ZEROCLAW_AGENT")
+	if agentName == "" {
+		agentName = "default"
+	}
+	var rest []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "-a" || arg == "--agent" {
+			if i+1 < len(args) {
+				agentName = args[i+1]
+				i++
+				continue
+			}
+		} else if strings.HasPrefix(arg, "--agent=") {
+			agentName = strings.TrimPrefix(arg, "--agent=")
+			continue
+		} else if strings.HasPrefix(arg, "-a=") {
+			agentName = strings.TrimPrefix(arg, "-a=")
+			continue
+		}
+		rest = append(rest, arg)
+	}
+	return agentName, rest
+}
 
 // Run dispatches a zeroclaw CLI invocation. Everything except up, doctor, and
 // the env file-copy commands is a thin RPC client of zeroclawd.
 func Run(args []string) error {
+	agentName, args := parseAgentAndArgs(args)
 	if len(args) == 0 {
 		return errors.New(usage)
 	}
@@ -45,26 +78,32 @@ func Run(args []string) error {
 	case "help", "-h", "--help":
 		if len(args) > 1 {
 			switch args[1] {
+			case "list":
+				fmt.Println("usage: zeroclaw list")
+				return nil
 			case "auth":
-				fmt.Println("usage: zeroclaw auth [sync|login]")
+				fmt.Println("usage: zeroclaw [-a <agent>] auth [sync|login]")
 				return nil
 			case "daemon":
-				fmt.Println("usage: zeroclaw daemon start|run|stop")
+				fmt.Println("usage: zeroclaw [-a <agent>] daemon start|run|stop")
 				return nil
 			case "give":
-				fmt.Println("usage: zeroclaw give <file>")
+				fmt.Println("usage: zeroclaw [-a <agent>] give <file>")
 				return nil
 			case "take":
-				fmt.Println("usage: zeroclaw take <path> [dest]")
+				fmt.Println("usage: zeroclaw [-a <agent>] take <path> [dest]")
 				return nil
 			case "exec":
-				fmt.Println(`usage: zeroclaw exec "<prompt>"`)
+				fmt.Println(`usage: zeroclaw [-a <agent>] exec "<prompt>"`)
 				return nil
 			case "race":
 				fmt.Println(`usage: zeroclaw race "<prompt>"`)
 				return nil
+			case "reset-container":
+				fmt.Println("usage: zeroclaw [-a <agent>] reset-container")
+				return nil
 			case "reset-env":
-				fmt.Println("usage: zeroclaw reset-env --force")
+				fmt.Println("usage: zeroclaw [-a <agent>] reset-env --force")
 				return nil
 			}
 		}
@@ -73,33 +112,35 @@ func Run(args []string) error {
 	case "version", "-v", "--version":
 		fmt.Println("zeroclaw", version)
 		return nil
+	case "list":
+		return listAgents(os.Stdout)
 	case "up":
-		if err := env.Up(); err != nil {
+		if err := env.Up(agentName); err != nil {
 			return err
 		}
-		return daemon.Launch()
+		return daemon.Launch(agentName)
 	case "down":
-		if err := daemon.Stop(); err != nil {
+		if err := daemon.Stop(agentName); err != nil {
 			fmt.Fprintln(os.Stderr, "warning:", err)
 		}
-		return env.Down()
+		return env.Down(agentName)
 	case "status":
-		if info, ok := daemon.Running(); ok {
+		if info, ok := daemon.Running(agentName); ok {
 			fmt.Printf("daemon:    running (pid %d, port %d)\n", info.PID, info.Port)
 		} else {
 			fmt.Println("daemon:    not running")
 		}
-		return env.Status(os.Stdout)
+		return env.Status(os.Stdout, agentName)
 	case "doctor":
-		if err := env.Doctor(os.Stdout); err != nil {
+		if err := env.Doctor(os.Stdout, agentName); err != nil {
 			return err
 		}
-		_, ok := daemon.Running()
+		_, ok := daemon.Running(agentName)
 		if ok {
-			fmt.Println("ok   zeroclawd responding")
+			fmt.Printf("ok   zeroclawd (%s) responding\n", agentName)
 			return nil
 		}
-		fmt.Println("FAIL zeroclawd responding (zeroclaw up)")
+		fmt.Printf("FAIL zeroclawd (%s) responding (zeroclaw up)\n", agentName)
 		return nil
 	case "audit":
 		return env.Audit(os.Stdout)
@@ -117,20 +158,20 @@ func Run(args []string) error {
 		if prompt == "" {
 			return errors.New(`usage: zeroclaw exec "<prompt>"`)
 		}
-		return execTurn("main", prompt)
+		return execTurn("main", prompt, agentName)
 	case "chat":
 		conversation := "main"
 		if len(args) > 1 {
 			conversation = args[1]
 		}
-		return chat(conversation)
+		return chat(conversation, agentName)
 	case "beat":
-		return daemon.Beat()
+		return daemon.Beat(agentName)
 	case "give":
 		if len(args) != 2 {
 			return errors.New("usage: zeroclaw give <file>")
 		}
-		return env.Give(args[1])
+		return env.Give(args[1], agentName)
 	case "take":
 		if len(args) < 2 || len(args) > 3 {
 			return errors.New("usage: zeroclaw take <path> [dest]")
@@ -139,31 +180,59 @@ func Run(args []string) error {
 		if len(args) == 3 {
 			dest = args[2]
 		}
-		return env.Take(args[1], dest)
+		return env.Take(args[1], dest, agentName)
+	case "reset-container":
+		if err := daemon.Stop(agentName); err != nil {
+			fmt.Fprintln(os.Stderr, "warning:", err)
+		}
+		return env.ResetContainer(agentName)
 	case "reset-env":
 		if len(args) < 2 || args[1] != "--force" {
 			return errors.New("reset-env deletes the agent's entire home; rerun as `zeroclaw reset-env --force` if you mean it")
 		}
-		if err := daemon.Stop(); err != nil {
+		if err := daemon.Stop(agentName); err != nil {
 			fmt.Fprintln(os.Stderr, "warning:", err)
 		}
-		return env.Reset()
+		return env.Reset(agentName)
 	case "auth":
-		return handleAuth(args)
+		return handleAuth(args, agentName)
 	case "daemon":
 		if len(args) > 1 && args[1] == "start" {
-			return daemon.Launch()
+			return daemon.Launch(agentName)
 		}
 		if len(args) > 1 && args[1] == "run" {
-			return daemon.RunServer()
+			return daemon.RunServer(agentName)
 		}
 		if len(args) > 1 && args[1] == "stop" {
-			return daemon.Stop()
+			return daemon.Stop(agentName)
 		}
 		return errors.New("usage: zeroclaw daemon start|run|stop")
 	default:
 		return fmt.Errorf("unknown command %q\n%s", args[0], usage)
 	}
+}
+
+func listAgents(w io.Writer) error {
+	summaries, err := env.DiscoverAgents()
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(w, "%-12s %-20s %-22s %-12s %-20s\n", "AGENT", "CONTAINER", "VOLUME", "STATUS", "DAEMON")
+	fmt.Fprintln(w, strings.Repeat("-", 90))
+	for _, s := range summaries {
+		daemonStatus := "not running"
+		if info, ok := daemon.Running(s.Name); ok {
+			daemonStatus = fmt.Sprintf("running (pid %d)", info.PID)
+		}
+		fmt.Fprintf(w, "%-12s %-20s %-22s %-12s %-20s\n",
+			s.Name,
+			s.Container,
+			s.Volume,
+			s.ContainerStatus,
+			daemonStatus,
+		)
+	}
+	return nil
 }
 
 // renderer prints one turn's driver events in zero's visual language: muted
@@ -232,9 +301,9 @@ func (r *renderer) event(ev agent.Event) {
 	r.last = ev.Type
 }
 
-func execTurn(conversation, prompt string) error {
+func execTurn(conversation, prompt string, agentName ...string) error {
 	r := &renderer{}
-	trailer, err := turnStream(conversation, prompt, r.event)
+	trailer, err := turnStream(conversation, prompt, r.event, agentName...)
 	r.flushText()
 	if err != nil {
 		return err
@@ -248,10 +317,14 @@ func execTurn(conversation, prompt string) error {
 	return nil
 }
 
-func chat(conversation string) error {
-	info, ok := daemon.Running()
+func chat(conversation string, agentName ...string) error {
+	agent := "default"
+	if len(agentName) > 0 && agentName[0] != "" {
+		agent = agentName[0]
+	}
+	info, ok := daemon.Running(agent)
 	if !ok {
-		return errors.New("zeroclawd is not running; run `zeroclaw up`")
+		return fmt.Errorf("zeroclawd is not running for agent %s; run `zeroclaw up`", agent)
 	}
 	code := tui.Run(context.Background(), tui.Options{
 		Conversation: conversation,

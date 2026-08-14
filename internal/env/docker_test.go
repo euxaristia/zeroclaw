@@ -9,6 +9,30 @@ import (
 	"testing"
 )
 
+func TestContainerAndVolumeNaming(t *testing.T) {
+	cases := []struct {
+		agent         string
+		wantContainer string
+		wantVolume    string
+	}{
+		{"", "zeroclaw", "zeroclaw-home"},
+		{"default", "zeroclaw", "zeroclaw-home"},
+		{"work", "zeroclaw-work", "zeroclaw-work-home"},
+		{"staging-1", "zeroclaw-staging-1", "zeroclaw-staging-1-home"},
+	}
+
+	for _, c := range cases {
+		gotC := ContainerName(c.agent)
+		if gotC != c.wantContainer {
+			t.Errorf("ContainerName(%q) = %q, want %q", c.agent, gotC, c.wantContainer)
+		}
+		gotV := VolumeName(c.agent)
+		if gotV != c.wantVolume {
+			t.Errorf("VolumeName(%q) = %q, want %q", c.agent, gotV, c.wantVolume)
+		}
+	}
+}
+
 func TestSanitizeContainerPath(t *testing.T) {
 	cases := []struct {
 		name    string

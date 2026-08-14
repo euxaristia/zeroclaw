@@ -35,6 +35,8 @@ type Event struct {
 }
 
 type TurnOptions struct {
+	// Container overrides the target container name (defaults to env.Container).
+	Container string
 	// SessionID resumes an existing backend session when set.
 	SessionID string
 	// NewSessionID asks the backend to create the session under this id, so

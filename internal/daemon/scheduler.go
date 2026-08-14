@@ -58,6 +58,7 @@ func (s *server) runScheduled(ctx context.Context, conversation, prompt string) 
 	defer lock.Unlock()
 
 	opts := agent.TurnOptions{
+		Container: s.container,
 		SessionID: s.sessions.Get(conversation),
 		Prompt:    prompt,
 		Autonomy:  "high",

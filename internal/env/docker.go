@@ -16,7 +16,10 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
+
+	"zeroclaw/internal/config"
 )
 
 const (
@@ -33,6 +36,30 @@ func RegisterBackendDoctor(fn func(w io.Writer, container string)) {
 	backendDoctor = fn
 }
 
+// ContainerName returns the Docker container name for the given agent profile.
+func ContainerName(agent ...string) string {
+	name := "default"
+	if len(agent) > 0 && agent[0] != "" {
+		name = agent[0]
+	}
+	if name == "default" {
+		return Container
+	}
+	return "zeroclaw-" + name
+}
+
+// VolumeName returns the Docker named volume for the given agent profile.
+func VolumeName(agent ...string) string {
+	name := "default"
+	if len(agent) > 0 && agent[0] != "" {
+		name = agent[0]
+	}
+	if name == "default" {
+		return Volume
+	}
+	return "zeroclaw-" + name + "-home"
+}
+
 func isLinuxAMD64(path string) bool {
 	f, err := elf.Open(path)
 	if err != nil {
@@ -43,19 +70,14 @@ func isLinuxAMD64(path string) bool {
 }
 
 func dockerCmd(ctx context.Context, args ...string) *exec.Cmd {
-	var cmd *exec.Cmd
-	if ctx != nil {
-		cmd = exec.CommandContext(ctx, "docker", args...)
-	} else {
-		cmd = exec.Command("docker", args...)
-	}
+	cmd := exec.CommandContext(ctx, "docker", args...)
 	hideConsole(cmd)
 	cmd.Env = append(os.Environ(), "DOCKER_CLI_HINTS=false")
 	return cmd
 }
 
 func docker(args ...string) (string, error) {
-	cmd := dockerCmd(nil, args...)
+	cmd := dockerCmd(context.Background(), args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("docker %s: %w\n%s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
@@ -64,7 +86,7 @@ func docker(args ...string) (string, error) {
 }
 
 func dockerOK(args ...string) bool {
-	cmd := dockerCmd(nil, args...)
+	cmd := dockerCmd(context.Background(), args...)
 	cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
 	return cmd.Run() == nil
 }
@@ -111,7 +133,7 @@ func envDir() (string, error) {
 	return "", fmt.Errorf("cannot find env/Dockerfile next to the zeroclaw executable or in the current directory")
 }
 
-func Up() error {
+func Up(agent ...string) error {
 	if err := EngineReady(); err != nil {
 		return err
 	}
@@ -132,26 +154,30 @@ func Up() error {
 			return fmt.Errorf("image build failed: %w", err)
 		}
 	}
-	if _, err := docker("volume", "create", Volume); err != nil {
+
+	container := ContainerName(agent...)
+	volume := VolumeName(agent...)
+
+	if _, err := docker("volume", "create", volume); err != nil {
 		return err
 	}
-	if dockerOK("container", "inspect", Container) {
-		if _, err := docker("start", Container); err != nil {
+	if dockerOK("container", "inspect", container) {
+		if _, err := docker("start", container); err != nil {
 			return err
 		}
-	} else if _, err := docker("run", "-d", "--name", Container, "--restart", "unless-stopped",
-		"-v", Volume+":"+Home, Image, "sleep", "infinity"); err != nil {
+	} else if _, err := docker("run", "-d", "--name", container, "--restart", "unless-stopped",
+		"-v", volume+":"+Home, Image, "sleep", "infinity"); err != nil {
 		return err
 	}
-	if err := seed(); err != nil {
+	if err := seed(container); err != nil {
 		return err
 	}
-	fmt.Println("zeroclaw environment is up")
+	fmt.Printf("zeroclaw environment (%s) is up\n", container)
 	return nil
 }
 
 // seed populates the agent home on first run and is a no-op afterwards.
-func seed() error {
+func seed(container string) error {
 	script := strings.Join([]string{
 		"set -e",
 		"mkdir -p ~/.config/zero ~/memory ~/workspace ~/incoming ~/outgoing",
@@ -159,13 +185,13 @@ func seed() error {
 		"[ -e ~/MEMORY.md ] || cp /opt/zeroclaw/bootstrap/MEMORY.md ~/MEMORY.md",
 		"[ -e ~/HEARTBEAT.md ] || cp /opt/zeroclaw/bootstrap/HEARTBEAT.md ~/HEARTBEAT.md",
 	}, " && ")
-	if _, err := docker("exec", Container, "sh", "-c", script); err != nil {
+	if _, err := docker("exec", container, "sh", "-c", script); err != nil {
 		return err
 	}
-	if err := adoptZeroAuth(); err != nil {
+	if err := adoptZeroAuth(container); err != nil {
 		return err
 	}
-	return allowSandboxNetwork()
+	return allowSandboxNetwork(container)
 }
 
 // allowSandboxNetwork opens zero's inner network sandbox inside the container.
@@ -174,18 +200,18 @@ func seed() error {
 // strands the agent (it cannot reach GitHub while gh, git, and curl sit
 // installed for exactly that). Only a missing setting is filled in: an
 // operator who deliberately set "deny" in the agent's config keeps it.
-func allowSandboxNetwork() error {
+func allowSandboxNetwork(container string) error {
 	script := `f=~/.config/zero/config.json
 [ -e "$f" ] || exit 0
 jq '.sandbox.network //= "allow"' "$f" > "$f.tmp" && mv "$f.tmp" "$f"`
-	_, err := docker("exec", Container, "sh", "-c", script)
+	_, err := docker("exec", container, "sh", "-c", script)
 	return err
 }
 
 // adoptZeroAuth copies the host zero provider config and encrypted credential
 // store into the agent's volume once, so the agent can talk to the same
 // provider as the host zero install. Files are never overwritten on later ups.
-func adoptZeroAuth() error {
+func adoptZeroAuth(container string) error {
 	hostCfg, err := os.UserConfigDir()
 	if err != nil {
 		return nil
@@ -197,10 +223,10 @@ func adoptZeroAuth() error {
 		if !fileExists(p) {
 			continue
 		}
-		if dockerOK("exec", Container, "test", "-e", Home+"/.config/zero/"+f) {
+		if dockerOK("exec", container, "test", "-e", Home+"/.config/zero/"+f) {
 			continue
 		}
-		if _, err := docker("cp", p, Container+":"+Home+"/.config/zero/"+f); err != nil {
+		if _, err := docker("cp", p, container+":"+Home+"/.config/zero/"+f); err != nil {
 			return err
 		}
 		copied = true
@@ -210,13 +236,14 @@ func adoptZeroAuth() error {
 		return nil
 	}
 	// docker cp writes as root; hand the files to the agent user.
-	_, err = docker("exec", "-u", "root", Container, "chown", "-R", "zeroclaw:zeroclaw", Home+"/.config/zero")
+	_, err = docker("exec", "-u", "root", container, "chown", "-R", "zeroclaw:zeroclaw", Home+"/.config/zero")
 	return err
 }
 
 // SyncAuth explicitly copies the host zero provider config and encrypted credential
 // store into the agent's volume, overwriting container zero auth files if present.
-func SyncAuth() error {
+func SyncAuth(agent ...string) error {
+	container := ContainerName(agent...)
 	hostCfg, err := os.UserConfigDir()
 	if err != nil {
 		return fmt.Errorf("getting user config dir: %w", err)
@@ -228,7 +255,7 @@ func SyncAuth() error {
 		if !fileExists(p) {
 			continue
 		}
-		if _, err := docker("cp", p, Container+":"+Home+"/.config/zero/"+f); err != nil {
+		if _, err := docker("cp", p, container+":"+Home+"/.config/zero/"+f); err != nil {
 			return fmt.Errorf("copying %s: %w", f, err)
 		}
 		copied++
@@ -237,10 +264,10 @@ func SyncAuth() error {
 	if copied == 0 {
 		return fmt.Errorf("no host zero configuration found in %s", src)
 	}
-	if _, err := docker("exec", "-u", "root", Container, "chown", "-R", "zeroclaw:zeroclaw", Home+"/.config/zero"); err != nil {
+	if _, err := docker("exec", "-u", "root", container, "chown", "-R", "zeroclaw:zeroclaw", Home+"/.config/zero"); err != nil {
 		return fmt.Errorf("chown zero config: %w", err)
 	}
-	return allowSandboxNetwork()
+	return allowSandboxNetwork(container)
 }
 
 func isTerminal(f *os.File) bool {
@@ -252,9 +279,10 @@ func isTerminal(f *os.File) bool {
 }
 
 // InteractiveAuth launches an interactive zero setup or zero auth session inside the container.
-func InteractiveAuth(args []string) error {
+func InteractiveAuth(args []string, agent ...string) error {
+	container := ContainerName(agent...)
 	if len(args) > 0 && args[0] == "sync" {
-		return SyncAuth()
+		return SyncAuth(agent...)
 	}
 	execFlags := "-i"
 	if isTerminal(os.Stdin) {
@@ -262,9 +290,9 @@ func InteractiveAuth(args []string) error {
 	}
 	var zeroCmd []string
 	if len(args) == 0 {
-		zeroCmd = []string{"exec", execFlags, Container, "zero", "setup"}
+		zeroCmd = []string{"exec", execFlags, container, "zero", "setup"}
 	} else {
-		zeroCmd = append([]string{"exec", execFlags, Container, "zero", "auth"}, args...)
+		zeroCmd = append([]string{"exec", execFlags, container, "zero", "auth"}, args...)
 	}
 	cmd := exec.Command("docker", zeroCmd...)
 	cmd.Env = append(os.Environ(), "DOCKER_CLI_HINTS=false")
@@ -276,7 +304,8 @@ func InteractiveAuth(args []string) error {
 
 // Give copies a host file into the agent's ~/incoming. This and Take are the
 // only sanctioned host-to-agent file paths; there are no bind mounts.
-func Give(hostPath string) error {
+func Give(hostPath string, agent ...string) error {
+	container := ContainerName(agent...)
 	abs, err := filepath.Abs(hostPath)
 	if err != nil {
 		return err
@@ -285,10 +314,10 @@ func Give(hostPath string) error {
 		return fmt.Errorf("no such file: %s", abs)
 	}
 	dest := Home + "/incoming/" + filepath.Base(abs)
-	if _, err := docker("cp", abs, Container+":"+dest); err != nil {
+	if _, err := docker("cp", abs, container+":"+dest); err != nil {
 		return err
 	}
-	if _, err := docker("exec", "-u", "root", Container, "chown", "-R", "zeroclaw:zeroclaw", Home+"/incoming"); err != nil {
+	if _, err := docker("exec", "-u", "root", container, "chown", "-R", "zeroclaw:zeroclaw", Home+"/incoming"); err != nil {
 		return err
 	}
 	fmt.Println("gave", filepath.Base(abs), "->", dest)
@@ -316,12 +345,6 @@ func sanitizeContainerPath(containerPath string) (string, error) {
 	return clean, nil
 }
 
-// takeScript resolves $1 to its real, symlink-free path inside the
-// container, rejects it unless it is $2 (Home) or under it, then streams a
-// tar of either the resolved path's contents ($3 == "1", docker cp's "copy
-// directory contents" form) or the resolved path itself. Resolving and
-// reading happen in this one process so a symlink cannot be swapped in
-// between a separate check and a separate copy.
 const takeScript = `p=$(readlink -f "$1") || exit 1
 case "$p" in
   "$2"|"$2"/*) ;;
@@ -333,15 +356,12 @@ else
   exec tar -cf - -C "$(dirname "$p")" "$(basename "$p")"
 fi`
 
-// exitCodeTraversalDenied is takeScript's exit status for a resolved path
-// outside Home. Chosen to not collide with tar's or sh's own exit codes
-// (both commonly exit 1 or 2 on failure), so a real tar/readlink error is
-// never misreported as a traversal denial.
 const exitCodeTraversalDenied = 91
 
 // Take copies a file or directory out of the agent's home to a host path.
 // Relative container paths are resolved against the agent home.
-func Take(containerPath, hostDest string) error {
+func Take(containerPath, hostDest string, agent ...string) error {
+	container := ContainerName(agent...)
 	clean, err := sanitizeContainerPath(containerPath)
 	if err != nil {
 		return err
@@ -356,7 +376,7 @@ func Take(containerPath, hostDest string) error {
 		src = strings.TrimSuffix(clean, "/.")
 	}
 
-	cmd := DockerCommandContext(context.Background(), "exec", Container, "sh", "-c", takeScript, "sh", src, Home, contentsOnly)
+	cmd := DockerCommandContext(context.Background(), "exec", container, "sh", "-c", takeScript, "sh", src, Home, contentsOnly)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return err
@@ -368,9 +388,6 @@ func Take(containerPath, hostDest string) error {
 		return err
 	}
 	extractErr := extractTar(stdout, hostDest)
-	// tar.Reader stops at the archive's end-of-archive marker, short of the
-	// writer's block padding. Drain the rest so docker exec's write doesn't
-	// block on a full pipe and leave cmd.Wait hanging forever.
 	_, _ = io.Copy(io.Discard, stdout)
 	if waitErr := cmd.Wait(); waitErr != nil {
 		if cmd.ProcessState.ExitCode() == exitCodeTraversalDenied {
@@ -385,11 +402,6 @@ func Take(containerPath, hostDest string) error {
 	return nil
 }
 
-// extractTar writes a tar stream into destDir, creating it if necessary. The
-// container is not fully trusted, so every entry name and symlink target is
-// checked to stay within destDir before touching the filesystem; a crafted
-// ".." entry or a symlink planted ahead of a same-named file could otherwise
-// write outside the requested destination.
 func extractTar(r io.Reader, destDir string) error {
 	destDir, err := filepath.Abs(destDir)
 	if err != nil {
@@ -424,7 +436,7 @@ func extractTar(r io.Reader, destDir string) error {
 			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 				return err
 			}
-			_ = os.Remove(target) // don't follow a pre-existing entry at this path
+			_ = os.Remove(target)
 			if err := os.Symlink(hdr.Linkname, target); err != nil {
 				return err
 			}
@@ -434,14 +446,14 @@ func extractTar(r io.Reader, destDir string) error {
 			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 				return err
 			}
-			_ = os.Remove(target) // don't write through a pre-existing symlink
+			_ = os.Remove(target)
 			mode := os.FileMode(hdr.Mode) & os.ModePerm
 			f, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
 			if err != nil {
 				return err
 			}
 			if _, copyErr := io.Copy(f, tr); copyErr != nil {
-				f.Close()
+				_ = f.Close()
 				return copyErr
 			}
 			if err := f.Close(); err != nil {
@@ -451,11 +463,6 @@ func extractTar(r io.Reader, destDir string) error {
 	}
 }
 
-// safeJoin joins destDir with a tar-provided relative path (an entry name or
-// a symlink target) and rejects anything that would resolve outside destDir,
-// including an absolute-looking name (tar entries are POSIX-style, so a
-// leading "/" is rejected directly rather than trusting the host OS's own
-// notion of absolute).
 func safeJoin(destDir, name string) (string, error) {
 	if path.IsAbs(filepath.ToSlash(name)) {
 		return "", fmt.Errorf("%q is an absolute path", name)
@@ -468,46 +475,64 @@ func safeJoin(destDir, name string) (string, error) {
 	return joined, nil
 }
 
-func Down() error {
-	_, err := docker("stop", Container)
+func Down(agent ...string) error {
+	container := ContainerName(agent...)
+	_, err := docker("stop", container)
 	return err
+}
+
+// ResetContainer removes only the container, preserving the agent's volume and home directory.
+func ResetContainer(agent ...string) error {
+	container := ContainerName(agent...)
+	if dockerOK("container", "inspect", container) {
+		if _, err := docker("rm", "-f", container); err != nil {
+			return err
+		}
+	}
+	fmt.Printf("zeroclaw container %s removed (volume preserved)\n", container)
+	return nil
 }
 
 // Reset removes the container and the volume: the agent's entire world.
 // The CLI requires --force before calling this.
-func Reset() error {
-	if dockerOK("container", "inspect", Container) {
-		if _, err := docker("rm", "-f", Container); err != nil {
+func Reset(agent ...string) error {
+	container := ContainerName(agent...)
+	volume := VolumeName(agent...)
+	if dockerOK("container", "inspect", container) {
+		if _, err := docker("rm", "-f", container); err != nil {
 			return err
 		}
 	}
-	if dockerOK("volume", "inspect", Volume) {
-		if _, err := docker("volume", "rm", Volume); err != nil {
+	if dockerOK("volume", "inspect", volume) {
+		if _, err := docker("volume", "rm", volume); err != nil {
 			return err
 		}
 	}
-	fmt.Println("zeroclaw environment removed")
+	fmt.Printf("zeroclaw environment (%s) removed\n", container)
 	return nil
 }
 
-func Status(w io.Writer) error {
+func Status(w io.Writer, agent ...string) error {
 	if err := EngineReady(); err != nil {
 		return err
 	}
+	container := ContainerName(agent...)
+	volume := VolumeName(agent...)
 	state := "absent"
-	if dockerOK("container", "inspect", Container) {
-		out, err := docker("inspect", "-f", "{{.State.Status}}", Container)
+	if dockerOK("container", "inspect", container) {
+		out, err := docker("inspect", "-f", "{{.State.Status}}", container)
 		if err != nil {
 			return err
 		}
 		state = out
 	}
-	vol := dockerOK("volume", "inspect", Volume)
-	fmt.Fprintf(w, "container: %s\nvolume:    %v\n", state, vol)
+	vol := dockerOK("volume", "inspect", volume)
+	fmt.Fprintf(w, "container: %s (%s)\nvolume:    %v (%s)\n", state, container, vol, volume)
 	return nil
 }
 
-func Doctor(w io.Writer) error {
+func Doctor(w io.Writer, agent ...string) error {
+	container := ContainerName(agent...)
 	check := func(name string, ok bool, hint string) {
 		mark := "ok  "
 		if !ok {
@@ -527,21 +552,107 @@ func Doctor(w io.Writer) error {
 		return nil
 	}
 	check("image "+Image, dockerOK("image", "inspect", Image), "zeroclaw up builds it")
-	running := dockerOK("exec", Container, "true")
-	check("container "+Container+" running", running, "zeroclaw up")
+	running := dockerOK("exec", container, "true")
+	check("container "+container+" running", running, "zeroclaw up")
 	if running {
 		if backendDoctor != nil {
-			backendDoctor(w, Container)
+			backendDoctor(w, container)
 		}
-		check("zero credentials adopted", dockerOK("exec", Container, "test", "-e", Home+"/.config/zero/credentials.enc"), "zeroclaw up copies them from the host zero config")
+		check("zero credentials adopted", dockerOK("exec", container, "test", "-e", Home+"/.config/zero/credentials.enc"), "zeroclaw up copies them from the host zero config")
 	}
 	dir, err := envDir()
 	check("env build context", err == nil, "run from the zeroclaw repo")
 	if err == nil {
 		zeroBin := filepath.Join(dir, "bin", "zero")
 		check("env/bin/zero (linux build)", isLinuxAMD64(zeroBin), "cross-compile zero for linux/amd64")
-
 	}
 	fmt.Fprintln(w, "note: running without hard isolation is not supported yet; docker is required (tier 3 fallback is an M4 item)")
 	return nil
+}
+
+// AgentSummary represents status information for an agent instance.
+type AgentSummary struct {
+	Name            string
+	Container       string
+	Volume          string
+	ContainerStatus string
+	VolumePresent   bool
+}
+
+// DiscoverAgents finds all configured, containerized, or persisted agent instances.
+func DiscoverAgents() ([]AgentSummary, error) {
+	agentsMap := map[string]bool{"default": true}
+
+	if cfgAgents, err := config.ConfiguredAgents(); err == nil {
+		for _, a := range cfgAgents {
+			if a != "" {
+				agentsMap[a] = true
+			}
+		}
+	}
+
+	if EngineReady() == nil {
+		// Inspect Docker containers
+		if out, err := docker("ps", "-a", "--filter", "name=zeroclaw", "--format", "{{.Names}}"); err == nil {
+			for _, line := range strings.Split(out, "\n") {
+				line = strings.TrimSpace(line)
+				if line == "zeroclaw" {
+					agentsMap["default"] = true
+				} else if strings.HasPrefix(line, "zeroclaw-") {
+					agentName := strings.TrimPrefix(line, "zeroclaw-")
+					if agentName != "" {
+						agentsMap[agentName] = true
+					}
+				}
+			}
+		}
+		// Inspect Docker volumes
+		if out, err := docker("volume", "ls", "--filter", "name=zeroclaw", "--format", "{{.Name}}"); err == nil {
+			for _, line := range strings.Split(out, "\n") {
+				line = strings.TrimSpace(line)
+				if line == "zeroclaw-home" {
+					agentsMap["default"] = true
+				} else if strings.HasPrefix(line, "zeroclaw-") && strings.HasSuffix(line, "-home") {
+					agentName := strings.TrimSuffix(strings.TrimPrefix(line, "zeroclaw-"), "-home")
+					if agentName != "" {
+						agentsMap[agentName] = true
+					}
+				}
+			}
+		}
+	}
+
+	var names []string
+	for a := range agentsMap {
+		names = append(names, a)
+	}
+	sort.Strings(names)
+
+	var summaries []AgentSummary
+	for _, a := range names {
+		cName := ContainerName(a)
+		vName := VolumeName(a)
+		cStatus := "absent"
+		vPresent := false
+
+		if dockerOK("container", "inspect", cName) {
+			if out, err := docker("inspect", "-f", "{{.State.Status}}", cName); err == nil && out != "" {
+				cStatus = out
+			} else {
+				cStatus = "present"
+			}
+		}
+		if dockerOK("volume", "inspect", vName) {
+			vPresent = true
+		}
+
+		summaries = append(summaries, AgentSummary{
+			Name:            a,
+			Container:       cName,
+			Volume:          vName,
+			ContainerStatus: cStatus,
+			VolumePresent:   vPresent,
+		})
+	}
+	return summaries, nil
 }

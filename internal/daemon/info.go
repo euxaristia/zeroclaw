@@ -20,10 +20,10 @@ type Info struct {
 	PID   int    `json:"pid"`
 }
 
-func infoPath() (string, error) { return config.Path("daemon.json") }
+func infoPath(agent ...string) (string, error) { return config.Path("daemon.json", agent...) }
 
-func saveInfo(i Info) error {
-	p, err := infoPath()
+func saveInfo(i Info, agent ...string) error {
+	p, err := infoPath(agent...)
 	if err != nil {
 		return err
 	}
@@ -34,8 +34,8 @@ func saveInfo(i Info) error {
 	return os.WriteFile(p, data, 0o600)
 }
 
-func LoadInfo() (Info, error) {
-	p, err := infoPath()
+func LoadInfo(agent ...string) (Info, error) {
+	p, err := infoPath(agent...)
 	if err != nil {
 		return Info{}, err
 	}
@@ -50,9 +50,9 @@ func LoadInfo() (Info, error) {
 	return i, nil
 }
 
-func removeInfo() {
-	if p, err := infoPath(); err == nil {
-		os.Remove(p)
+func removeInfo(agent ...string) {
+	if p, err := infoPath(agent...); err == nil {
+		_ = os.Remove(p)
 	}
 }
 
@@ -72,13 +72,13 @@ func (i Info) Ping() bool {
 	if err != nil {
 		return false
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	return resp.StatusCode == http.StatusOK
 }
 
 // Running loads the handle and pings it.
-func Running() (Info, bool) {
-	i, err := LoadInfo()
+func Running(agent ...string) (Info, bool) {
+	i, err := LoadInfo(agent...)
 	if err != nil {
 		return Info{}, false
 	}

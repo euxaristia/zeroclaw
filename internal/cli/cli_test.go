@@ -82,22 +82,88 @@ func TestRunDaemonArgCount(t *testing.T) {
 	}
 }
 
+func TestParseAgentAndArgs(t *testing.T) {
+	tests := []struct {
+		name      string
+		env       string
+		args      []string
+		wantAgent string
+		wantArgs  []string
+	}{
+		{
+			name:      "default when empty",
+			args:      []string{"status"},
+			wantAgent: "default",
+			wantArgs:  []string{"status"},
+		},
+		{
+			name:      "short flag -a",
+			args:      []string{"-a", "work", "up"},
+			wantAgent: "work",
+			wantArgs:  []string{"up"},
+		},
+		{
+			name:      "long flag --agent",
+			args:      []string{"--agent", "lab", "chat"},
+			wantAgent: "lab",
+			wantArgs:  []string{"chat"},
+		},
+		{
+			name:      "equal flag --agent=foo",
+			args:      []string{"--agent=foo", "status"},
+			wantAgent: "foo",
+			wantArgs:  []string{"status"},
+		},
+		{
+			name:      "env var fallback",
+			env:       "staging",
+			args:      []string{"doctor"},
+			wantAgent: "staging",
+			wantArgs:  []string{"doctor"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.env != "" {
+				t.Setenv("ZEROCLAW_AGENT", tc.env)
+			} else {
+				t.Setenv("ZEROCLAW_AGENT", "")
+			}
+			agent, rest := parseAgentAndArgs(tc.args)
+			if agent != tc.wantAgent {
+				t.Errorf("agent = %q, want %q", agent, tc.wantAgent)
+			}
+			if len(rest) != len(tc.wantArgs) {
+				t.Fatalf("rest len = %d, want %d", len(rest), len(tc.wantArgs))
+			}
+			for i := range rest {
+				if rest[i] != tc.wantArgs[i] {
+					t.Errorf("rest[%d] = %q, want %q", i, rest[i], tc.wantArgs[i])
+				}
+			}
+		})
+	}
+}
+
 func TestRunHelp(t *testing.T) {
 	tests := []struct {
 		name       string
 		args       []string
 		wantSubstr string
 	}{
-		{name: "help command", args: []string{"help"}, wantSubstr: "usage: zeroclaw <command>"},
-		{name: "short help flag", args: []string{"-h"}, wantSubstr: "usage: zeroclaw <command>"},
-		{name: "long help flag", args: []string{"--help"}, wantSubstr: "usage: zeroclaw <command>"},
-		{name: "contextual help auth", args: []string{"help", "auth"}, wantSubstr: "usage: zeroclaw auth [sync|login]"},
-		{name: "contextual help daemon", args: []string{"help", "daemon"}, wantSubstr: "usage: zeroclaw daemon start|run|stop"},
-		{name: "contextual help give", args: []string{"help", "give"}, wantSubstr: "usage: zeroclaw give <file>"},
-		{name: "contextual help take", args: []string{"help", "take"}, wantSubstr: "usage: zeroclaw take <path> [dest]"},
-		{name: "contextual help exec", args: []string{"help", "exec"}, wantSubstr: `usage: zeroclaw exec "<prompt>"`},
+		{name: "help command", args: []string{"help"}, wantSubstr: "usage: zeroclaw [-a <agent>] <command>"},
+		{name: "short help flag", args: []string{"-h"}, wantSubstr: "usage: zeroclaw [-a <agent>] <command>"},
+		{name: "long help flag", args: []string{"--help"}, wantSubstr: "usage: zeroclaw [-a <agent>] <command>"},
+		{name: "contextual help list", args: []string{"help", "list"}, wantSubstr: "usage: zeroclaw list"},
+		{name: "contextual help auth", args: []string{"help", "auth"}, wantSubstr: "usage: zeroclaw [-a <agent>] auth [sync|login]"},
+		{name: "contextual help daemon", args: []string{"help", "daemon"}, wantSubstr: "usage: zeroclaw [-a <agent>] daemon start|run|stop"},
+		{name: "contextual help give", args: []string{"help", "give"}, wantSubstr: "usage: zeroclaw [-a <agent>] give <file>"},
+		{name: "contextual help take", args: []string{"help", "take"}, wantSubstr: "usage: zeroclaw [-a <agent>] take <path> [dest]"},
+		{name: "contextual help exec", args: []string{"help", "exec"}, wantSubstr: `usage: zeroclaw [-a <agent>] exec "<prompt>"`},
 		{name: "contextual help race", args: []string{"help", "race"}, wantSubstr: `usage: zeroclaw race "<prompt>"`},
-		{name: "contextual help reset-env", args: []string{"help", "reset-env"}, wantSubstr: "usage: zeroclaw reset-env --force"},
+		{name: "contextual help reset-container", args: []string{"help", "reset-container"}, wantSubstr: "usage: zeroclaw [-a <agent>] reset-container"},
+		{name: "contextual help reset-env", args: []string{"help", "reset-env"}, wantSubstr: "usage: zeroclaw [-a <agent>] reset-env --force"},
 	}
 
 	for _, tc := range tests {

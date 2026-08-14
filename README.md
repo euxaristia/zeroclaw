@@ -114,20 +114,23 @@ go install golang.org/x/vuln/cmd/govulncheck@v1.3.0
 ## Commands ⌨️
 
 ```
-zeroclaw up                    start environment + zeroclawd
-zeroclaw down                  stop zeroclawd + environment
-zeroclaw status                daemon and environment state
-zeroclaw chat [conversation]   interactive chat (default: main)
-zeroclaw exec "<prompt>"       one turn in the main conversation
-zeroclaw race "<prompt>"       benchmark a prompt across multiple zero sessions
-zeroclaw visualizer [--watch]  live TUI dashboard of container, daemon & security metrics
-zeroclaw audit                 run automated security scorecard diagnostics
-zeroclaw beat                  fire a heartbeat turn now
-zeroclaw give <file>           copy a host file into the agent's ~/incoming
-zeroclaw take <path> [dest]    copy a file out of the agent's home
-zeroclaw doctor                diagnose setup
-zeroclaw reset-env --force     destroy the environment and the agent's home
-zeroclaw daemon run|stop       run zeroclawd in the foreground / stop it
+zeroclaw [-a <agent>] list      list all available zeroclaw agent profiles and status
+zeroclaw [-a <agent>] up        start environment + zeroclawd
+zeroclaw [-a <agent>] down      stop zeroclawd + environment
+zeroclaw [-a <agent>] status    daemon and environment state
+zeroclaw [-a <agent>] chat      interactive chat (default conversation: main)
+zeroclaw [-a <agent>] exec "<p>" one turn in the main conversation
+zeroclaw race "<prompt>"        benchmark a prompt across multiple zero sessions
+zeroclaw visualizer [--watch]   live TUI dashboard of container, daemon & security metrics
+zeroclaw audit                  run automated security scorecard diagnostics
+zeroclaw [-a <agent>] beat      fire a heartbeat turn now
+zeroclaw [-a <agent>] give <f>  copy a host file into the agent's ~/incoming
+zeroclaw [-a <agent>] take <p>  copy a file out of the agent's home
+zeroclaw [-a <agent>] doctor    diagnose setup
+zeroclaw [-a <agent>] auth      manage container zero auth (interactive login or sync host credentials)
+zeroclaw [-a <agent>] reset-container remove disposable container (preserves volume & home data)
+zeroclaw [-a <agent>] reset-env --force destroy the environment and the agent's home
+zeroclaw [-a <agent>] daemon run|stop run zeroclawd in the foreground / stop it
 ```
 
 ## Autonomy and memory 🧠

@@ -39,10 +39,11 @@ type Telegram struct {
 
 var defaultConfig = Config{HeartbeatEvery: "30m"}
 
-// Load reads ~/.zeroclaw/config.json, writing the default file first if it
-// does not exist yet so the user has something to edit.
-func Load() (Config, error) {
-	p, err := Path("config.json")
+// Load reads the agent's config.json (~/.zeroclaw/config.json for default,
+// ~/.zeroclaw/agents/<name>/config.json for named agents), writing the default
+// file first if it does not exist yet so the user has something to edit.
+func Load(agent ...string) (Config, error) {
+	p, err := Path("config.json", agent...)
 	if err != nil {
 		return Config{}, err
 	}
@@ -76,8 +77,8 @@ func Load() (Config, error) {
 
 // LoadTelegram reads the Telegram channel config, returning ok=false when the
 // channel is disabled (no token) so callers skip startup cleanly.
-func LoadTelegram() (Telegram, bool, error) {
-	cfg, err := Load()
+func LoadTelegram(agent ...string) (Telegram, bool, error) {
+	cfg, err := Load(agent...)
 	if err != nil {
 		return Telegram{}, false, err
 	}

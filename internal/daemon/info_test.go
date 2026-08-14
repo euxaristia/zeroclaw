@@ -19,8 +19,6 @@ func TestSaveLoadInfo(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 	t.Setenv("USERPROFILE", tmp)
-	// Guard: if the runtime homes somewhere other than tmp, skip rather than
-	// touch the real config.
 	if got, err := os.UserHomeDir(); err != nil || got != tmp {
 		t.Skipf("os.UserHomeDir did not resolve to temp home (%q); skipping", got)
 	}
@@ -38,6 +36,31 @@ func TestSaveLoadInfo(t *testing.T) {
 	}
 }
 
+func TestNamedAgentSaveLoadInfo(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
+	if got, err := os.UserHomeDir(); err != nil || got != tmp {
+		t.Skipf("os.UserHomeDir did not resolve to temp home (%q); skipping", got)
+	}
+
+	in := Info{Port: 8765, Token: "xyz", PID: 123}
+	if err := saveInfo(in, "work"); err != nil {
+		t.Fatalf("saveInfo(work): %v", err)
+	}
+	out, err := LoadInfo("work")
+	if err != nil {
+		t.Fatalf("LoadInfo(work): %v", err)
+	}
+	if out != in {
+		t.Errorf("named agent round-trip = %+v, want %+v", out, in)
+	}
+	removeInfo("work")
+	if _, err := LoadInfo("work"); err == nil {
+		t.Error("LoadInfo(work) after removeInfo returned nil error, want error")
+	}
+}
+
 func TestLoadInfoMissing(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
@@ -51,7 +74,6 @@ func TestLoadInfoMissing(t *testing.T) {
 }
 
 func TestRunningWithNoDaemon(t *testing.T) {
-	// No daemon.json is written to a temp HOME, so Running() must be false.
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 	t.Setenv("USERPROFILE", tmp)

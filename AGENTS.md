@@ -166,7 +166,7 @@ host                                    container (zeroclaw-env)
   (ZEROCLAW.md identity + operating rules, MEMORY.md index, HEARTBEAT.md). The
   identity prompt instructs the agent to persist facts and to write zero skills
   after complex tasks, hermes-style. No code needed beyond seeding and prompts.
-- **CLI surface**: `zeroclaw up | down | status | chat | exec "<prompt>" | give | take | beat | doctor | reset-env | daemon start|run|stop`.
+- **CLI surface**: `zeroclaw [-a <name>] up | down | status | chat | exec "<prompt>" | list | reset-container | reset-env | give | take | beat | doctor | daemon start|run|stop`.
 
 ## Stack
 
