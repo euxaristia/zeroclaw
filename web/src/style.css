@@ -70,6 +70,91 @@ html, body {
   line-height: 1.45;
 }
 
+/* Rendered markdown lives inside .block.reply. The transcript is
+   white-space: pre-wrap for the plain-text blocks, so block elements here
+   reset it and supply their own spacing instead of inheriting stray
+   newlines from the source. */
+.block.reply {
+  white-space: normal;
+}
+
+.block.reply p {
+  margin: 0 0 0.6rem;
+  white-space: pre-wrap;
+}
+
+.block.reply > *:last-child {
+  margin-bottom: 0;
+}
+
+.block.reply h1,
+.block.reply h2,
+.block.reply h3,
+.block.reply h4,
+.block.reply h5,
+.block.reply h6 {
+  margin: 0.9rem 0 0.5rem;
+  line-height: 1.25;
+  font-size: 1rem;
+}
+
+.block.reply h1 {
+  font-size: 1.25rem;
+}
+
+.block.reply h2 {
+  font-size: 1.1rem;
+}
+
+.block.reply ul,
+.block.reply ol {
+  margin: 0 0 0.6rem;
+  padding-left: 1.5rem;
+}
+
+.block.reply li {
+  margin: 0.15rem 0;
+}
+
+.block.reply code {
+  background: #1a1a1e;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.05rem 0.3rem;
+  font-size: 0.9em;
+}
+
+.block.reply pre {
+  background: #1a1a1e;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.7rem 0.85rem;
+  margin: 0 0 0.6rem;
+  overflow-x: auto;
+}
+
+.block.reply pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.9em;
+}
+
+.block.reply blockquote {
+  margin: 0 0 0.6rem;
+  padding-left: 0.8rem;
+  border-left: 2px solid var(--border);
+  color: var(--faint);
+}
+
+.block.reply a {
+  color: var(--accent);
+}
+
+.block.reply strong {
+  font-weight: 600;
+}
+
 .block {
   margin-bottom: 0.75rem;
 }

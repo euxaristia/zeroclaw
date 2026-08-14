@@ -1,5 +1,6 @@
 import { readToken, fetchStatus, fetchProviders, fetchModels, streamTurn, type AgentEvent, type CatalogItem } from "./api";
 import { openPicker } from "./picker";
+import { renderMarkdown } from "./markdown";
 
 let authToken = "";
 let currentProvider: string | undefined;
@@ -282,18 +283,39 @@ async function selectPaletteItem(i: number) {
 // shows this line too, and for /model auto it's the only place that
 // reveals which model auto actually routed to — then the first real
 // content event clears it.
-function renderTurn(thinkingEl: HTMLElement | null): (ev: AgentEvent) => void {
+function renderTurn(thinkingEl: HTMLElement | null): {
+  onEvent: (ev: AgentEvent) => void;
+  flush: () => void;
+} {
   let reasoningEl: HTMLDivElement | null = null;
   let textEl: HTMLDivElement | null = null;
   let lastType = "";
   let thinking = thinkingEl;
+
+  // Markdown is re-rendered from the accumulated source on every delta, so
+  // the raw text has to be kept alongside the element. Repainting is
+  // coalesced onto an animation frame: a fast stream would otherwise
+  // re-parse the whole reply per token.
+  let markdownSrc = "";
+  let repaintQueued = false;
+  const repaint = () => {
+    repaintQueued = false;
+    if (!textEl) return;
+    textEl.replaceChildren(renderMarkdown(markdownSrc));
+    transcript.scrollTop = transcript.scrollHeight;
+  };
+  const queueRepaint = () => {
+    if (repaintQueued) return;
+    repaintQueued = true;
+    requestAnimationFrame(repaint);
+  };
 
   const clearThinking = () => {
     thinking?.remove();
     thinking = null;
   };
 
-  return (ev: AgentEvent) => {
+  const onEvent = (ev: AgentEvent) => {
     switch (ev.type) {
       case "run_start":
         if (thinking) thinking.textContent = `session ${ev.sessionId} · ${ev.provider} ${ev.model}`;
@@ -307,8 +329,10 @@ function renderTurn(thinkingEl: HTMLElement | null): (ev: AgentEvent) => void {
         clearThinking();
         if (!textEl || lastType === "tool_call" || lastType === "tool_result") {
           textEl = appendBlock("reply");
+          markdownSrc = "";
         }
-        textEl.textContent += ev.delta;
+        markdownSrc += ev.delta;
+        queueRepaint();
         break;
       case "tool_call": {
         clearThinking();
@@ -340,6 +364,11 @@ function renderTurn(thinkingEl: HTMLElement | null): (ev: AgentEvent) => void {
     transcript.scrollTop = transcript.scrollHeight;
     saveTranscript();
   };
+
+  // flush forces any frame-deferred markdown repaint to land now, so the
+  // final delta is on screen (and in the saved transcript) before the turn
+  // is considered finished.
+  return { onEvent, flush: repaint };
 }
 
 async function sendTurn() {
@@ -367,19 +396,21 @@ async function sendTurn() {
   const thinkingEl = appendBlock("thinking");
   thinkingEl.textContent = "thinking…";
 
+  const turn = renderTurn(thinkingEl);
   try {
-    const onEvent = renderTurn(thinkingEl);
     const trailer = await streamTurn(
       authToken,
       conversation,
       prompt,
       { provider: currentProvider, model: currentModel },
-      onEvent,
+      turn.onEvent,
     );
+    turn.flush();
     const el = appendBlock(`session ${trailer.error ? "err" : "ok"}`);
     el.textContent = `${trailer.status} · session ${trailer.sessionId}`;
     saveTranscript();
   } catch (err) {
+    turn.flush();
     fail(err instanceof Error ? err.message : String(err));
   } finally {
     thinkingEl.remove();
