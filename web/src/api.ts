@@ -64,6 +64,11 @@ export async function fetchStatus(token: string): Promise<StatusResponse> {
   return resp.json();
 }
 
+export interface TurnOverrides {
+  provider?: string;
+  model?: string;
+}
+
 // streamTurn posts one turn and calls onEvent for each driver event as it
 // streams in over newline-delimited JSON, matching how the CLI's turnStream
 // reads the same /turn response.
@@ -71,12 +76,13 @@ export async function streamTurn(
   token: string,
   conversation: string,
   prompt: string,
+  overrides: TurnOverrides,
   onEvent: (ev: AgentEvent) => void,
 ): Promise<Trailer> {
   const resp = await fetch("/turn", {
     method: "POST",
     headers: { ...authHeaders(token), "Content-Type": "application/json" },
-    body: JSON.stringify({ conversation, prompt }),
+    body: JSON.stringify({ conversation, prompt, ...overrides }),
   });
   if (!resp.ok || !resp.body) {
     throw new Error(`daemon rejected turn: ${resp.status}`);
