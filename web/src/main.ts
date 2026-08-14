@@ -83,6 +83,7 @@ const convInput = document.getElementById("conv-input") as HTMLInputElement;
 const composer = document.getElementById("composer") as HTMLFormElement;
 const promptInput = document.getElementById("prompt-input") as HTMLTextAreaElement;
 const sendBtn = document.getElementById("send-btn") as HTMLButtonElement;
+const historyIndicator = document.getElementById("history-indicator") as HTMLSpanElement;
 
 function appendBlock(className: string): HTMLDivElement {
   const el = document.createElement("div");
@@ -230,6 +231,17 @@ function closePalette() {
   palette.hidden = true;
 }
 
+// Shows "2/5" while browsing history, so a recalled prompt is visibly
+// distinct from a fresh draft. Hidden once back at the live draft.
+function updateHistoryIndicator() {
+  if (historyIdx >= inputHistory.length) {
+    historyIndicator.hidden = true;
+    return;
+  }
+  historyIndicator.textContent = `${historyIdx + 1}/${inputHistory.length}`;
+  historyIndicator.hidden = false;
+}
+
 function historyBack() {
   if (inputHistory.length === 0) return;
   if (historyIdx === inputHistory.length) historyDraft = promptInput.value;
@@ -237,6 +249,7 @@ function historyBack() {
     historyIdx--;
     promptInput.value = inputHistory[historyIdx]!;
     autoGrow();
+    updateHistoryIndicator();
   }
 }
 
@@ -245,6 +258,7 @@ function historyForward() {
   historyIdx++;
   promptInput.value = historyIdx === inputHistory.length ? historyDraft : inputHistory[historyIdx]!;
   autoGrow();
+  updateHistoryIndicator();
 }
 
 async function selectPaletteItem(i: number) {
@@ -340,6 +354,7 @@ async function sendTurn() {
   autoGrow();
   closePalette();
 
+  historyIndicator.hidden = true;
   if (!prompt.startsWith("/")) {
     inputHistory.push(prompt);
     historyIdx = inputHistory.length;
@@ -456,6 +471,9 @@ async function main() {
   promptInput.addEventListener("input", () => {
     autoGrow();
     updatePalette();
+    // Real typing only: history recall assigns .value directly, which does
+    // not fire a native input event, so the badge survives a recall.
+    historyIndicator.hidden = true;
   });
   autoGrow();
 }
