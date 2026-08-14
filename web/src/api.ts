@@ -34,6 +34,10 @@ export interface StatusResponse {
   container: string;
   pid: number;
   conversations: number;
+  // What a turn with no override would use. Absent when the daemon cannot
+  // reach the backend to ask.
+  provider?: string;
+  model?: string;
 }
 
 // Mirrors internal/catalog.Item.

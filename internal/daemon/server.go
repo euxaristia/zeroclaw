@@ -249,12 +249,22 @@ func (s *server) auth(next http.Handler) http.Handler {
 }
 
 func (s *server) handleStatus(w http.ResponseWriter, r *http.Request) {
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	body := map[string]any{
 		"agent":         s.agentName,
 		"container":     s.container,
 		"pid":           os.Getpid(),
 		"conversations": len(s.sessions.All()),
-	})
+	}
+	// Zeroclaw holds no default provider/model; the backend resolves them.
+	// Report them so a client can show what a turn would use before one has
+	// run. Best effort: a container that is down must not fail /status.
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	if def, err := s.driver.Defaults(ctx, s.container); err == nil {
+		body["provider"] = def.Provider
+		body["model"] = def.Model
+	}
+	_ = json.NewEncoder(w).Encode(body)
 }
 
 func (s *server) handleConversations(w http.ResponseWriter, r *http.Request) {

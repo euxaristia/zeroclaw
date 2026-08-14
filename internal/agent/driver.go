@@ -66,8 +66,21 @@ type TurnResult struct {
 	ExitCode  int
 }
 
+// Defaults is what the backend will use for a turn that requests no
+// provider or model override. Zeroclaw itself holds no default: an empty
+// TurnOptions.Provider/Model leaves the choice to the backend's own
+// configuration, so the only way to display it before the first turn is to
+// ask the backend.
+type Defaults struct {
+	Provider string
+	Model    string
+}
+
 type Driver interface {
 	Turn(ctx context.Context, opts TurnOptions, onEvent func(Event)) (TurnResult, error)
+	// Defaults reports the backend's active provider and model. Callers
+	// treat an error as "unknown" rather than fatal; it is display sugar.
+	Defaults(ctx context.Context, container string) (Defaults, error)
 }
 
 // NewDriver constructs the execution driver for the requested backend.

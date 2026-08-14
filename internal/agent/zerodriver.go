@@ -42,6 +42,43 @@ func (ZeroDriver) Doctor(container string) HealthResult {
 	}
 }
 
+// zeroConfig is the subset of `zero config --json` zeroclaw reads. Zero
+// resolves the active provider itself, and the active provider's entry
+// carries the model that a turn with no override will use.
+type zeroConfig struct {
+	ActiveProvider string `json:"activeProvider"`
+	Providers      []struct {
+		Name   string `json:"name"`
+		Model  string `json:"model"`
+		Active bool   `json:"active"`
+	} `json:"providers"`
+}
+
+// Defaults asks zero what it would use for a turn with no override, so the
+// operator can see the provider and model before sending anything.
+func (ZeroDriver) Defaults(ctx context.Context, container string) (Defaults, error) {
+	if container == "" {
+		container = env.Container
+	}
+	cmd := env.DockerCommandContext(ctx, "exec", container, "zero", "config", "--json")
+	out, err := cmd.Output()
+	if err != nil {
+		return Defaults{}, fmt.Errorf("reading zero config: %w", err)
+	}
+	var cfg zeroConfig
+	if err := json.Unmarshal(out, &cfg); err != nil {
+		return Defaults{}, fmt.Errorf("parsing zero config: %w", err)
+	}
+	res := Defaults{Provider: cfg.ActiveProvider}
+	for _, p := range cfg.Providers {
+		if p.Active || p.Name == cfg.ActiveProvider {
+			res.Model = p.Model
+			break
+		}
+	}
+	return res, nil
+}
+
 func buildZeroArgs(opts TurnOptions) []string {
 	container := opts.Container
 	if container == "" {

@@ -623,6 +623,11 @@ async function main() {
   try {
     const status = await fetchStatus(authToken);
     statusRight.textContent = `${status.agent} · ${status.container} · pid ${status.pid}`;
+    // Show what a turn would use before one has run. An explicit /model or
+    // /provider from a previous session wins over the backend default.
+    currentProvider ??= status.provider;
+    currentModel ??= status.model;
+    updateModelIndicator();
     setStatusReady();
   } catch (err) {
     statusText.textContent = "connection failed";
@@ -697,6 +702,22 @@ async function main() {
       composer.requestSubmit();
     }
   });
+  // "/" anywhere on the page focuses the composer and opens the palette, so
+  // the commands are reachable without clicking into the input first. Skips
+  // cases where the key is ordinary text: an already-focused field, or a
+  // modifier chord the browser owns.
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
+    const active = document.activeElement;
+    if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return;
+    if (document.querySelector(".picker-overlay")) return;
+    e.preventDefault();
+    promptInput.focus();
+    promptInput.value = "/";
+    autoGrow();
+    updatePalette();
+  });
+
   // resize: none in CSS; grow with content instead of the native drag handle
   // (which rendered as a near-invisible nub in the wrong corner of the row).
   promptInput.addEventListener("input", () => {
