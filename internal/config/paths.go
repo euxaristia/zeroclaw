@@ -3,26 +3,85 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
-func Dir() (string, error) {
+// ValidateAgentName ensures an agent profile name is safe and contains no path traversal elements.
+func ValidateAgentName(name string) error {
+	if name == "" || name == "default" {
+		return nil
+	}
+	if name == "." || name == ".." {
+		return fmt.Errorf("invalid agent name %q: reserved name", name)
+	}
+	if strings.ContainsAny(name, "/\\:\x00") {
+		return fmt.Errorf("invalid agent name %q: contains path separators or invalid characters", name)
+	}
+	for _, r := range name {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.') {
+			return fmt.Errorf("invalid agent name %q: must contain only alphanumeric characters, '-', '_', or '.'", name)
+		}
+	}
+	return nil
+}
+
+// Dir returns the base configuration directory for the given agent profile.
+// Default or empty agent maps to ~/.zeroclaw, while named agents map to ~/.zeroclaw/agents/<name>.
+func Dir(agent ...string) (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(home, ".zeroclaw")
+	name := "default"
+	if len(agent) > 0 && agent[0] != "" {
+		name = agent[0]
+	}
+	if err := ValidateAgentName(name); err != nil {
+		return "", err
+	}
+	var dir string
+	if name == "default" {
+		dir = filepath.Join(home, ".zeroclaw")
+	} else {
+		dir = filepath.Join(home, ".zeroclaw", "agents", name)
+	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}
 	return dir, nil
 }
 
-func Path(name string) (string, error) {
-	dir, err := Dir()
+// Path returns the path to a named configuration file inside the agent's config directory.
+func Path(name string, agent ...string) (string, error) {
+	dir, err := Dir(agent...)
 	if err != nil {
 		return "", err
 	}
 	return filepath.Join(dir, name), nil
+}
+
+// ConfiguredAgents scans ~/.zeroclaw/agents for configured named agents.
+func ConfiguredAgents() ([]string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+	agentsDir := filepath.Join(home, ".zeroclaw", "agents")
+	entries, err := os.ReadDir(agentsDir)
+	if os.IsNotExist(err) {
+		return []string{"default"}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	agents := []string{"default"}
+	for _, entry := range entries {
+		if entry.IsDir() && ValidateAgentName(entry.Name()) == nil {
+			agents = append(agents, entry.Name())
+		}
+	}
+	return agents, nil
 }

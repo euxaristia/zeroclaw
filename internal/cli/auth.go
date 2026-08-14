@@ -5,10 +5,10 @@ import (
 )
 
 // handleAuth dispatches the zeroclaw auth subcommand.
-func handleAuth(args []string) error {
+func handleAuth(args []string, agent ...string) error {
 	subArgs := []string{}
 	if len(args) > 1 {
 		subArgs = args[1:]
 	}
-	return env.InteractiveAuth(subArgs)
+	return env.InteractiveAuth(subArgs, agent...)
 }

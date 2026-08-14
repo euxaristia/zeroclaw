@@ -22,6 +22,7 @@ import (
 	"zeroclaw/internal/agent"
 	"zeroclaw/internal/channels"
 	"zeroclaw/internal/config"
+	"zeroclaw/internal/env"
 )
 
 type TurnRequest struct {
@@ -45,6 +46,8 @@ type Trailer struct {
 }
 
 type server struct {
+	agentName    string
+	container    string
 	driver       agent.Driver
 	sessions     *agent.SessionStore
 	token        string
@@ -66,15 +69,19 @@ func (s *server) convLock(name string) *sync.Mutex {
 // RunServer runs zeroclawd in the foreground of the current process. It is
 // normally reached via the hidden `zeroclaw daemon run` subcommand spawned
 // detached by `zeroclaw up`.
-func RunServer() error {
-	if existing, ok := Running(); ok && existing.PID != os.Getpid() {
-		return fmt.Errorf("zeroclawd already running (pid %d)", existing.PID)
+func RunServer(agentNameOpt ...string) error {
+	agentName := "default"
+	if len(agentNameOpt) > 0 && agentNameOpt[0] != "" {
+		agentName = agentNameOpt[0]
 	}
-	cfg, err := config.Load()
+	if existing, ok := Running(agentName); ok && existing.PID != os.Getpid() {
+		return fmt.Errorf("zeroclawd already running for agent %s (pid %d)", agentName, existing.PID)
+	}
+	cfg, err := config.Load(agentName)
 	if err != nil {
 		return err
 	}
-	sessPath, err := config.Path("conversations.json")
+	sessPath, err := config.Path("conversations.json", agentName)
 	if err != nil {
 		return err
 	}
@@ -95,6 +102,8 @@ func RunServer() error {
 		return err
 	}
 	s := &server{
+		agentName:    agentName,
+		container:    env.ContainerName(agentName),
 		driver:       driver,
 		sessions:     sessions,
 		token:        hex.EncodeToString(tokenBytes),
@@ -107,10 +116,10 @@ func RunServer() error {
 		return err
 	}
 	port := ln.Addr().(*net.TCPAddr).Port
-	if err := saveInfo(Info{Port: port, Token: s.token, PID: os.Getpid()}); err != nil {
+	if err := saveInfo(Info{Port: port, Token: s.token, PID: os.Getpid()}, agentName); err != nil {
 		return err
 	}
-	defer removeInfo()
+	defer removeInfo(agentName)
 
 	schedCtx, cancelSched := context.WithCancel(context.Background())
 	defer cancelSched()
@@ -120,12 +129,12 @@ func RunServer() error {
 	// allowlist by chat id. Disabled when no token is configured.
 	tgCtx, cancelTg := context.WithCancel(context.Background())
 	defer cancelTg()
-	if tg, ok, err := config.LoadTelegram(); ok {
+	if tg, ok, err := config.LoadTelegram(agentName); ok {
 		go channels.StartTelegram(tgCtx, tg, s)
 	} else if err != nil {
-		log.Printf("telegram: config error, channel disabled: %v", err)
+		log.Printf("telegram (%s): config error, channel disabled: %v", agentName, err)
 	} else {
-		log.Printf("telegram: no token configured, channel disabled")
+		log.Printf("telegram (%s): no token configured, channel disabled", agentName)
 	}
 
 	shutdown := make(chan struct{})
@@ -150,13 +159,13 @@ func RunServer() error {
 	}
 	errCh := make(chan error, 1)
 	go func() { errCh <- httpSrv.Serve(ln) }()
-	log.Printf("zeroclawd listening on 127.0.0.1:%d (pid %d)", port, os.Getpid())
+	log.Printf("zeroclawd (%s) listening on 127.0.0.1:%d (pid %d)", agentName, port, os.Getpid())
 
 	select {
 	case <-shutdown:
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		httpSrv.Shutdown(ctx)
+		_ = httpSrv.Shutdown(ctx)
 		return nil
 	case err := <-errCh:
 		if errors.Is(err, http.ErrServerClosed) {
@@ -187,6 +196,7 @@ func (s *server) Turn(ctx context.Context, conversation, prompt, autonomy string
 	defer lock.Unlock()
 
 	opts := agent.TurnOptions{
+		Container: s.container,
 		SessionID: s.sessions.Get(conversation),
 		Prompt:    prompt,
 		Autonomy:  autonomy,
@@ -230,11 +240,16 @@ func (s *server) auth(next http.Handler) http.Handler {
 }
 
 func (s *server) handleStatus(w http.ResponseWriter, r *http.Request) {
-	json.NewEncoder(w).Encode(map[string]any{"pid": os.Getpid(), "conversations": len(s.sessions.All())})
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"agent":         s.agentName,
+		"container":     s.container,
+		"pid":           os.Getpid(),
+		"conversations": len(s.sessions.All()),
+	})
 }
 
 func (s *server) handleConversations(w http.ResponseWriter, r *http.Request) {
-	json.NewEncoder(w).Encode(s.sessions.All())
+	_ = json.NewEncoder(w).Encode(s.sessions.All())
 }
 
 func (s *server) handleTurn(w http.ResponseWriter, r *http.Request) {
@@ -259,13 +274,14 @@ func (s *server) handleTurn(w http.ResponseWriter, r *http.Request) {
 	enc := json.NewEncoder(w)
 	w.Header().Set("Content-Type", "application/x-ndjson")
 	emit := func(v any) {
-		enc.Encode(v)
+		_ = enc.Encode(v)
 		if flusher != nil {
 			flusher.Flush()
 		}
 	}
 
 	opts := agent.TurnOptions{
+		Container: s.container,
 		SessionID: s.sessions.Get(req.Conversation),
 		Prompt:    req.Prompt,
 		Provider:  req.Provider,

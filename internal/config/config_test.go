@@ -20,7 +20,7 @@ func TestInterval(t *testing.T) {
 		{"1h", true, time.Hour},
 		{"59s", false, 0},            // below the 1-minute floor
 		{"1m", true, time.Minute},    // exactly at the floor
-		{"not-a-duration", false, 0}, // unpar
+		{"not-a-duration", false, 0}, // unparseable
 	}
 	for _, tc := range tests {
 		got, ok := Interval(tc.in)
@@ -71,6 +71,66 @@ func TestDirAndPath(t *testing.T) {
 	}
 	if p != filepath.Join(want, "config.json") {
 		t.Errorf("Path = %q, want %q", p, filepath.Join(want, "config.json"))
+	}
+}
+
+func TestNamedAgentDirAndPath(t *testing.T) {
+	tmp := withTempHome(t)
+
+	dir, err := Dir("work")
+	if err != nil {
+		t.Fatalf("Dir(work): %v", err)
+	}
+	want := filepath.Join(tmp, ".zeroclaw", "agents", "work")
+	if dir != want {
+		t.Errorf("Dir(work) = %q, want %q", dir, want)
+	}
+
+	p, err := Path("config.json", "work")
+	if err != nil {
+		t.Fatalf("Path(config.json, work): %v", err)
+	}
+	if p != filepath.Join(want, "config.json") {
+		t.Errorf("Path = %q, want %q", p, filepath.Join(want, "config.json"))
+	}
+
+	agents, err := ConfiguredAgents()
+	if err != nil {
+		t.Fatalf("ConfiguredAgents: %v", err)
+	}
+	if len(agents) < 2 || agents[0] != "default" || agents[1] != "work" {
+		t.Errorf("ConfiguredAgents = %v, want [default work]", agents)
+	}
+}
+
+func TestValidateAgentName(t *testing.T) {
+	tests := []struct {
+		name    string
+		agent   string
+		wantErr bool
+	}{
+		{"empty is default", "", false},
+		{"default keyword", "default", false},
+		{"valid alphanumeric", "work", false},
+		{"valid with hyphen and underscore", "my-agent_1", false},
+		{"dot segment current", ".", true},
+		{"dot segment parent", "..", true},
+		{"unix path traversal", "../etc", true},
+		{"windows path traversal", `..\etc`, true},
+		{"slash contained", "foo/bar", true},
+		{"backslash contained", `foo\bar`, true},
+		{"colon contained", "foo:bar", true},
+		{"null byte contained", "foo\x00bar", true},
+		{"invalid symbols", "agent$name", true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateAgentName(tc.agent)
+			if (err != nil) != tc.wantErr {
+				t.Errorf("ValidateAgentName(%q) err = %v, wantErr = %v", tc.agent, err, tc.wantErr)
+			}
+		})
 	}
 }
 

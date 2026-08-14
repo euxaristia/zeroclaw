@@ -28,10 +28,14 @@ var streamClient = &http.Client{
 // turnStream sends one turn to zeroclawd and streams driver events back.
 // The CLI never executes agent logic in-process; if the daemon is down, the
 // only remedy offered is `zeroclaw up`.
-func turnStream(conversation, prompt string, onEvent func(agent.Event)) (daemon.Trailer, error) {
-	info, ok := daemon.Running()
+func turnStream(conversation, prompt string, onEvent func(agent.Event), agentName ...string) (daemon.Trailer, error) {
+	agName := "default"
+	if len(agentName) > 0 && agentName[0] != "" {
+		agName = agentName[0]
+	}
+	info, ok := daemon.Running(agName)
 	if !ok {
-		return daemon.Trailer{}, fmt.Errorf("zeroclawd is not running; run `zeroclaw up`")
+		return daemon.Trailer{}, fmt.Errorf("zeroclawd is not running for agent %s; run `zeroclaw up`", agName)
 	}
 	body, err := json.Marshal(daemon.TurnRequest{Conversation: conversation, Prompt: prompt})
 	if err != nil {
@@ -66,7 +70,7 @@ func turnStream(conversation, prompt string, onEvent func(agent.Event)) (daemon.
 			continue
 		}
 		if ev.Type == "zeroclaw_result" {
-			json.Unmarshal(line, &trailer)
+			_ = json.Unmarshal(line, &trailer)
 			continue
 		}
 		if onEvent != nil {

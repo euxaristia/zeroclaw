@@ -43,12 +43,16 @@ func (ZeroDriver) Doctor(container string) HealthResult {
 }
 
 func buildZeroArgs(opts TurnOptions) []string {
+	container := opts.Container
+	if container == "" {
+		container = env.Container
+	}
 	args := []string{"exec"}
 	if opts.Provider != "" {
 		args = append(args, "-e", "ZERO_PROVIDER="+opts.Provider)
 	}
 	args = append(args,
-		"-i", env.Container, "zero", "exec",
+		"-i", container, "zero", "exec",
 		"--input-format", "stream-json",
 		"--output-format", "stream-json",
 		"-C", workspace,
@@ -114,7 +118,7 @@ func (ZeroDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Event
 		err = fmt.Errorf("writing input event: %w", writeErr)
 		return
 	}
-	stdin.Close()
+	_ = stdin.Close()
 
 	res = TurnResult{ExitCode: -1}
 	sc := bufio.NewScanner(stdout)
