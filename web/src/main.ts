@@ -17,6 +17,66 @@ let historyDraft = "";
 
 const welcomeText = "zeroclaw web. Type /help for commands.";
 
+// Persisted in sessionStorage, same scope as the auth token: survives a
+// refresh but clears when the tab closes. A plain page reload previously
+// lost the whole transcript and the active /model, /provider, and
+// conversation selections, unlike the TUI where those live for the process
+// lifetime of one `zeroclaw chat` invocation.
+const TRANSCRIPT_KEY = "zeroclaw_transcript";
+const STATE_KEY = "zeroclaw_ui_state";
+
+function saveTranscript() {
+  const blocks = Array.from(transcript.children).map((el) => ({
+    className: el.className,
+    html: el.innerHTML,
+  }));
+  sessionStorage.setItem(TRANSCRIPT_KEY, JSON.stringify(blocks));
+}
+
+// loadTranscript replays a saved transcript's markup back into the DOM. The
+// stored HTML was produced entirely by this file via .textContent, never
+// from user- or model-supplied raw HTML, so re-injecting it here doesn't
+// introduce anything that wasn't already safely escaped on the way in.
+function loadTranscript(): boolean {
+  const raw = sessionStorage.getItem(TRANSCRIPT_KEY);
+  if (!raw) return false;
+  let blocks: { className: string; html: string }[];
+  try {
+    blocks = JSON.parse(raw);
+  } catch {
+    return false;
+  }
+  if (!Array.isArray(blocks) || blocks.length === 0) return false;
+  for (const b of blocks) {
+    const el = document.createElement("div");
+    el.className = b.className;
+    el.innerHTML = b.html;
+    transcript.appendChild(el);
+  }
+  transcript.scrollTop = transcript.scrollHeight;
+  return true;
+}
+
+function saveUIState() {
+  sessionStorage.setItem(
+    STATE_KEY,
+    JSON.stringify({ model: currentModel, provider: currentProvider, conversation: convInput.value }),
+  );
+}
+
+function loadUIState() {
+  const raw = sessionStorage.getItem(STATE_KEY);
+  if (!raw) return;
+  try {
+    const state = JSON.parse(raw) as { model?: string; provider?: string; conversation?: string };
+    currentModel = state.model;
+    currentProvider = state.provider;
+    if (state.conversation) convInput.value = state.conversation;
+  } catch {
+    // ignore malformed state
+  }
+}
+
 const transcript = document.getElementById("transcript") as HTMLDivElement;
 const statusAgent = document.getElementById("status-agent") as HTMLSpanElement;
 const convInput = document.getElementById("conv-input") as HTMLInputElement;
@@ -35,11 +95,13 @@ function appendBlock(className: string): HTMLDivElement {
 function fail(message: string) {
   const el = appendBlock("error");
   el.textContent = message;
+  saveTranscript();
 }
 
 function systemMessage(text: string) {
   const el = appendBlock("system");
   el.textContent = text;
+  saveTranscript();
 }
 
 // handleSlashCommand mirrors internal/tui/model.go's executeSlashCommandWithPrev:
@@ -64,6 +126,7 @@ async function handleSlashCommand(text: string): Promise<boolean> {
   if (text === "/clear") {
     transcript.replaceChildren();
     appendBlock("welcome").textContent = welcomeText;
+    saveTranscript();
     return true;
   }
   if (text === "/model") {
@@ -71,6 +134,7 @@ async function handleSlashCommand(text: string): Promise<boolean> {
     const picked = await openPicker("Choose a model", items);
     if (picked) {
       currentModel = picked.value;
+      saveUIState();
       systemMessage(`Switched model to ${currentModel}`);
     }
     return true;
@@ -80,17 +144,20 @@ async function handleSlashCommand(text: string): Promise<boolean> {
     const picked = await openPicker("Choose a provider", items);
     if (picked) {
       currentProvider = picked.value;
+      saveUIState();
       systemMessage(`Switched provider to ${currentProvider}`);
     }
     return true;
   }
   if (text.startsWith("/model ")) {
     currentModel = text.slice("/model ".length).trim() || currentModel;
+    saveUIState();
     systemMessage(`Switched model to ${currentModel}`);
     return true;
   }
   if (text.startsWith("/provider ")) {
     currentProvider = text.slice("/provider ".length).trim() || currentProvider;
+    saveUIState();
     systemMessage(`Switched provider to ${currentProvider}`);
     return true;
   }
@@ -193,25 +260,44 @@ async function selectPaletteItem(i: number) {
 // renderTurn mirrors cli.go's renderer.event: reasoning stays muted and
 // separate from the reply, tool calls get a name line plus a faint result
 // summary, and running text deltas coalesce into one growing block instead
-// of a new element per token.
-function renderTurn(): (ev: AgentEvent) => void {
+// of a new element per token. thinkingEl is the "thinking…" placeholder
+// sendTurn shows the instant it fires the request (there is otherwise no
+// feedback at all until the first token, matching internal/tui/model.go's
+// "thinking..." row while pending with no streaming text/reasoning yet).
+// run_start upgrades it to session/provider/model — the CLI's renderer
+// shows this line too, and for /model auto it's the only place that
+// reveals which model auto actually routed to — then the first real
+// content event clears it.
+function renderTurn(thinkingEl: HTMLElement | null): (ev: AgentEvent) => void {
   let reasoningEl: HTMLDivElement | null = null;
   let textEl: HTMLDivElement | null = null;
   let lastType = "";
+  let thinking = thinkingEl;
+
+  const clearThinking = () => {
+    thinking?.remove();
+    thinking = null;
+  };
 
   return (ev: AgentEvent) => {
     switch (ev.type) {
+      case "run_start":
+        if (thinking) thinking.textContent = `session ${ev.sessionId} · ${ev.provider} ${ev.model}`;
+        break;
       case "reasoning":
+        clearThinking();
         if (!reasoningEl) reasoningEl = appendBlock("reasoning");
         reasoningEl.textContent += ev.delta;
         break;
       case "text":
+        clearThinking();
         if (!textEl || lastType === "tool_call" || lastType === "tool_result") {
           textEl = appendBlock("reply");
         }
         textEl.textContent += ev.delta;
         break;
       case "tool_call": {
+        clearThinking();
         const el = appendBlock("tool");
         const name = document.createElement("span");
         name.className = "name";
@@ -221,6 +307,7 @@ function renderTurn(): (ev: AgentEvent) => void {
         break;
       }
       case "tool_result":
+        clearThinking();
         if (ev.display?.summary) {
           const el = appendBlock("tool");
           const summary = document.createElement("span");
@@ -230,12 +317,14 @@ function renderTurn(): (ev: AgentEvent) => void {
         }
         break;
       case "error":
+        clearThinking();
         fail(`${ev.code}: ${ev.message}`);
         textEl = null;
         break;
     }
     lastType = ev.type;
     transcript.scrollTop = transcript.scrollHeight;
+    saveTranscript();
   };
 }
 
@@ -246,6 +335,7 @@ async function sendTurn() {
 
   const userEl = appendBlock("user");
   userEl.textContent = prompt;
+  saveTranscript();
   promptInput.value = "";
   autoGrow();
   closePalette();
@@ -259,8 +349,11 @@ async function sendTurn() {
   if (await handleSlashCommand(prompt)) return;
   sendBtn.disabled = true;
 
+  const thinkingEl = appendBlock("thinking");
+  thinkingEl.textContent = "thinking…";
+
   try {
-    const onEvent = renderTurn();
+    const onEvent = renderTurn(thinkingEl);
     const trailer = await streamTurn(
       authToken,
       conversation,
@@ -270,9 +363,12 @@ async function sendTurn() {
     );
     const el = appendBlock(`session ${trailer.error ? "err" : "ok"}`);
     el.textContent = `${trailer.status} · session ${trailer.sessionId}`;
+    saveTranscript();
   } catch (err) {
     fail(err instanceof Error ? err.message : String(err));
   } finally {
+    thinkingEl.remove();
+    saveTranscript();
     sendBtn.disabled = false;
     promptInput.focus();
   }
@@ -289,6 +385,7 @@ async function main() {
     return;
   }
   authToken = token;
+  loadUIState();
 
   try {
     const status = await fetchStatus(authToken);
@@ -298,12 +395,16 @@ async function main() {
     fail(err instanceof Error ? err.message : String(err));
     return;
   }
-  appendBlock("welcome").textContent = welcomeText;
+  if (!loadTranscript()) {
+    appendBlock("welcome").textContent = welcomeText;
+    saveTranscript();
+  }
 
   composer.addEventListener("submit", (e) => {
     e.preventDefault();
     void sendTurn();
   });
+  convInput.addEventListener("input", saveUIState);
   promptInput.addEventListener("keydown", (e) => {
     if (!palette.hidden && paletteItems.length > 0) {
       if (e.key === "ArrowDown") {
