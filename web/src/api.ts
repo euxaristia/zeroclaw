@@ -94,17 +94,23 @@ export interface TurnOverrides {
 // streamTurn posts one turn and calls onEvent for each driver event as it
 // streams in over newline-delimited JSON, matching how the CLI's turnStream
 // reads the same /turn response.
+//
+// Aborting `signal` is a real cancellation, not just a UI one: the daemon
+// hands its request context to the driver, which hands it to `docker exec`,
+// so dropping the connection kills the in-flight turn in the container.
 export async function streamTurn(
   token: string,
   conversation: string,
   prompt: string,
   overrides: TurnOverrides,
   onEvent: (ev: AgentEvent) => void,
+  signal?: AbortSignal,
 ): Promise<Trailer> {
   const resp = await fetch("/turn", {
     method: "POST",
     headers: { ...authHeaders(token), "Content-Type": "application/json" },
     body: JSON.stringify({ conversation, prompt, ...overrides }),
+    signal,
   });
   if (!resp.ok || !resp.body) {
     throw new Error(`daemon rejected turn: ${resp.status}`);

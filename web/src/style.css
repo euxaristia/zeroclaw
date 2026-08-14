@@ -300,6 +300,12 @@ html, body {
   cursor: default;
 }
 
+#send-btn.stopping {
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+}
+
 .picker-overlay {
   position: fixed;
   inset: 0;

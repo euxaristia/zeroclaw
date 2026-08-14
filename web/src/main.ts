@@ -5,6 +5,7 @@ import { renderMarkdown } from "./markdown";
 let authToken = "";
 let currentProvider: string | undefined;
 let currentModel: string | undefined;
+let inFlight: AbortController | null = null;
 
 // Mirrors internal/tui/model.go's inputHistory/historyIdx/historyDraft: Up
 // walks back through previously sent prompts, Down walks forward, and the
@@ -98,6 +99,11 @@ function fail(message: string) {
   const el = appendBlock("error");
   el.textContent = message;
   saveTranscript();
+}
+
+function setSendButtonStopping(stopping: boolean) {
+  sendBtn.textContent = stopping ? "Stop" : "Send";
+  sendBtn.classList.toggle("stopping", stopping);
 }
 
 function systemMessage(text: string) {
@@ -391,12 +397,15 @@ async function sendTurn() {
   }
 
   if (await handleSlashCommand(prompt)) return;
-  sendBtn.disabled = true;
 
   const thinkingEl = appendBlock("thinking");
   thinkingEl.textContent = "thinking…";
 
   const turn = renderTurn(thinkingEl);
+  // While a turn runs, Send becomes Stop. Aborting drops the connection,
+  // which cancels the turn in the container rather than just hiding it.
+  inFlight = new AbortController();
+  setSendButtonStopping(true);
   try {
     const trailer = await streamTurn(
       authToken,
@@ -404,6 +413,7 @@ async function sendTurn() {
       prompt,
       { provider: currentProvider, model: currentModel },
       turn.onEvent,
+      inFlight.signal,
     );
     turn.flush();
     const el = appendBlock(`session ${trailer.error ? "err" : "ok"}`);
@@ -411,11 +421,17 @@ async function sendTurn() {
     saveTranscript();
   } catch (err) {
     turn.flush();
-    fail(err instanceof Error ? err.message : String(err));
+    if (err instanceof DOMException && err.name === "AbortError") {
+      const el = appendBlock("session err");
+      el.textContent = "stopped";
+    } else {
+      fail(err instanceof Error ? err.message : String(err));
+    }
   } finally {
+    inFlight = null;
+    setSendButtonStopping(false);
     thinkingEl.remove();
     saveTranscript();
-    sendBtn.disabled = false;
     promptInput.focus();
   }
 }
@@ -448,6 +464,10 @@ async function main() {
 
   composer.addEventListener("submit", (e) => {
     e.preventDefault();
+    if (inFlight) {
+      inFlight.abort();
+      return;
+    }
     void sendTurn();
   });
   convInput.addEventListener("input", saveUIState);
