@@ -186,6 +186,37 @@ function setStatusWorking() {
   workingTimer = setInterval(tick, 1000) as unknown as number;
 }
 
+// Esc cancels a running turn, matching internal/tui/model.go: the first
+// press only arms a 3s confirmation and leaves any draft alone, since
+// nothing has been cancelled yet; a second press within the window actually
+// aborts. Cancelling a long turn by accident is expensive, hence the
+// two-step rather than a single key.
+const ESC_CONFIRM_MS = 3000;
+let cancelConfirmTimer: number | undefined;
+
+function cancelConfirmActive(): boolean {
+  return cancelConfirmTimer !== undefined;
+}
+
+function armCancelConfirm() {
+  clearTimeout(cancelConfirmTimer);
+  statusline.classList.add("confirming");
+  statusText.textContent = "Press Esc again to cancel";
+  cancelConfirmTimer = setTimeout(() => {
+    cancelConfirmTimer = undefined;
+    statusline.classList.remove("confirming");
+    // Only restore the working display if the turn is genuinely still going.
+    if (inFlight) setStatusWorking();
+    else setStatusReady();
+  }, ESC_CONFIRM_MS) as unknown as number;
+}
+
+function disarmCancelConfirm() {
+  clearTimeout(cancelConfirmTimer);
+  cancelConfirmTimer = undefined;
+  statusline.classList.remove("confirming");
+}
+
 function setSession(id: string) {
   statusMeta.textContent = id ? `session ${id}` : "";
 }
@@ -308,14 +339,6 @@ async function handleSlashCommand(text: string): Promise<boolean> {
     setSession("");
     saveTranscript();
     systemMessage(`Conversation reset. ${activeConversation} starts fresh.`);
-    return true;
-  }
-  if (text === "/stop") {
-    if (inFlight) {
-      inFlight.abort();
-    } else {
-      systemMessage("Nothing running.");
-    }
     return true;
   }
   // /retry resends the last prompt rather than making you retype it. Slash
@@ -484,7 +507,6 @@ const COMMANDS: CatalogItem[] = [
   { group: "Commands", label: "/status", value: "/status", meta: "Show agent, container, and model", provider: "" },
   { group: "Commands", label: "/new", value: "/new", meta: "Reset this conversation's session", provider: "" },
   { group: "Commands", label: "/retry", value: "/retry", meta: "Resend the last prompt", provider: "" },
-  { group: "Commands", label: "/stop", value: "/stop", meta: "Cancel the running turn", provider: "" },
   { group: "Commands", label: "/copy", value: "/copy", meta: "Copy the last reply", provider: "" },
   { group: "Commands", label: "/export", value: "/export", meta: "Download the transcript", provider: "" },
   { group: "Commands", label: "/beat", value: "/beat", meta: "Fire a heartbeat turn now", provider: "" },
@@ -753,6 +775,9 @@ async function sendTurn() {
     }
   } finally {
     inFlight = null;
+    // Drop any armed Esc confirmation with the turn it belonged to, so a
+    // stray second Esc cannot cancel whatever runs next.
+    disarmCancelConfirm();
     setSendButtonStopping(false);
     setStatusReady();
     thinkingEl.remove();
@@ -868,6 +893,23 @@ async function main() {
   // the commands are reachable without clicking into the input first. Skips
   // cases where the key is ordinary text: an already-focused field, or a
   // modifier chord the browser owns.
+  // Esc cancels the running turn from anywhere on the page. The picker and
+  // the command palette own Esc while they are open, so this defers to them
+  // rather than cancelling a turn out from under a dismissal.
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (document.querySelector(".picker-overlay")) return;
+    if (!palette.hidden) return;
+    if (!inFlight) return;
+    e.preventDefault();
+    if (cancelConfirmActive()) {
+      disarmCancelConfirm();
+      inFlight.abort();
+      return;
+    }
+    armCancelConfirm();
+  });
+
   document.addEventListener("keydown", (e) => {
     if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
     const active = document.activeElement;

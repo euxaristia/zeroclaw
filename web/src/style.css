@@ -121,6 +121,12 @@ html, body {
   color: var(--muted);
 }
 
+/* Zero shows the Esc cancel confirmation in amber. */
+#statusline.confirming #status-text,
+#statusline.confirming #status-dot {
+  color: var(--amber);
+}
+
 #status-right {
   display: flex;
   align-items: center;
