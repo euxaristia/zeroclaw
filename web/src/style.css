@@ -109,6 +109,20 @@ html, body {
   color: var(--faint);
 }
 
+.block.thinking {
+  color: var(--muted);
+  animation: thinking-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes thinking-pulse {
+  0%, 100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 .block.welcome {
   color: var(--faint);
 }

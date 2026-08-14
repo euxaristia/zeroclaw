@@ -193,25 +193,44 @@ async function selectPaletteItem(i: number) {
 // renderTurn mirrors cli.go's renderer.event: reasoning stays muted and
 // separate from the reply, tool calls get a name line plus a faint result
 // summary, and running text deltas coalesce into one growing block instead
-// of a new element per token.
-function renderTurn(): (ev: AgentEvent) => void {
+// of a new element per token. thinkingEl is the "thinking…" placeholder
+// sendTurn shows the instant it fires the request (there is otherwise no
+// feedback at all until the first token, matching internal/tui/model.go's
+// "thinking..." row while pending with no streaming text/reasoning yet).
+// run_start upgrades it to session/provider/model — the CLI's renderer
+// shows this line too, and for /model auto it's the only place that
+// reveals which model auto actually routed to — then the first real
+// content event clears it.
+function renderTurn(thinkingEl: HTMLElement | null): (ev: AgentEvent) => void {
   let reasoningEl: HTMLDivElement | null = null;
   let textEl: HTMLDivElement | null = null;
   let lastType = "";
+  let thinking = thinkingEl;
+
+  const clearThinking = () => {
+    thinking?.remove();
+    thinking = null;
+  };
 
   return (ev: AgentEvent) => {
     switch (ev.type) {
+      case "run_start":
+        if (thinking) thinking.textContent = `session ${ev.sessionId} · ${ev.provider} ${ev.model}`;
+        break;
       case "reasoning":
+        clearThinking();
         if (!reasoningEl) reasoningEl = appendBlock("reasoning");
         reasoningEl.textContent += ev.delta;
         break;
       case "text":
+        clearThinking();
         if (!textEl || lastType === "tool_call" || lastType === "tool_result") {
           textEl = appendBlock("reply");
         }
         textEl.textContent += ev.delta;
         break;
       case "tool_call": {
+        clearThinking();
         const el = appendBlock("tool");
         const name = document.createElement("span");
         name.className = "name";
@@ -221,6 +240,7 @@ function renderTurn(): (ev: AgentEvent) => void {
         break;
       }
       case "tool_result":
+        clearThinking();
         if (ev.display?.summary) {
           const el = appendBlock("tool");
           const summary = document.createElement("span");
@@ -230,6 +250,7 @@ function renderTurn(): (ev: AgentEvent) => void {
         }
         break;
       case "error":
+        clearThinking();
         fail(`${ev.code}: ${ev.message}`);
         textEl = null;
         break;
@@ -259,8 +280,11 @@ async function sendTurn() {
   if (await handleSlashCommand(prompt)) return;
   sendBtn.disabled = true;
 
+  const thinkingEl = appendBlock("thinking");
+  thinkingEl.textContent = "thinking…";
+
   try {
-    const onEvent = renderTurn();
+    const onEvent = renderTurn(thinkingEl);
     const trailer = await streamTurn(
       authToken,
       conversation,
@@ -273,6 +297,7 @@ async function sendTurn() {
   } catch (err) {
     fail(err instanceof Error ? err.message : String(err));
   } finally {
+    thinkingEl.remove();
     sendBtn.disabled = false;
     promptInput.focus();
   }
