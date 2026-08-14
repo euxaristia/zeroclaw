@@ -127,6 +127,10 @@ html, body {
   color: var(--amber);
 }
 
+#status-extras {
+  color: var(--accent);
+}
+
 #status-right {
   display: flex;
   align-items: center;

@@ -53,6 +53,12 @@ type TurnOptions struct {
 	Provider string
 	// Model requests a specific LLM model override for the execution turn.
 	Model string
+	// ReasoningEffort is low, medium, or high, for models that support it.
+	// Empty leaves the backend's own default alone.
+	ReasoningEffort string
+	// MaxTurns caps the agent loop's tool turns for this run. Zero leaves
+	// the backend's default in place.
+	MaxTurns int
 	// Autonomy is low, medium, or high. Inside the container boundary the
 	// daemon will run high; the M0 CLI path defaults to medium.
 	Autonomy string

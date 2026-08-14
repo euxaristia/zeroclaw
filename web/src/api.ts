@@ -121,6 +121,10 @@ export async function fetchModels(token: string, provider: string): Promise<Cata
 export interface TurnOverrides {
   provider?: string;
   model?: string;
+  // low | medium | high; omitted leaves the backend default.
+  reasoningEffort?: string;
+  // Caps the agent loop's tool turns; omitted leaves the backend default.
+  maxTurns?: number;
 }
 
 // streamTurn posts one turn and calls onEvent for each driver event as it

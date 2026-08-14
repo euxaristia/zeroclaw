@@ -23,6 +23,11 @@ let inFlight: AbortController | null = null;
 let currentTheme = defaultTheme().name;
 let currentContextLabel = "";
 let currentContextWindow = 0;
+let currentEffort: string | undefined;
+let currentMaxTurns: number | undefined;
+
+// zero's model registry advertises exactly these.
+const EFFORTS = ["low", "medium", "high"];
 
 // Mirrors internal/tui/model.go's inputHistory/historyIdx/historyDraft: Up
 // walks back through previously sent prompts, Down walks forward, and the
@@ -97,6 +102,8 @@ function saveUIState() {
       provider: currentProvider,
       conversation: activeConversation,
       theme: currentTheme,
+      effort: currentEffort,
+      maxTurns: currentMaxTurns,
     }),
   );
 }
@@ -110,6 +117,8 @@ function loadUIState() {
       provider?: string;
       conversation?: string;
       theme?: string;
+      effort?: string;
+      maxTurns?: number;
     };
     currentModel = state.model;
     currentProvider = state.provider;
@@ -118,6 +127,8 @@ function loadUIState() {
       convInput.value = state.conversation;
     }
     if (state.theme) currentTheme = state.theme;
+    currentEffort = state.effort;
+    currentMaxTurns = state.maxTurns;
   } catch {
     // ignore malformed state
   }
@@ -135,6 +146,17 @@ const statusline = document.getElementById("statusline") as HTMLElement;
 const statusText = document.getElementById("status-text") as HTMLSpanElement;
 const contextGauge = document.getElementById("context-gauge") as HTMLSpanElement;
 const statusMeta = document.getElementById("status-meta") as HTMLSpanElement;
+const statusExtras = document.getElementById("status-extras") as HTMLSpanElement;
+
+// statusLine appends the active reasoning effort to the left chip in accent
+// and omits it when unset. The turn budget rides alongside it, since both
+// are per-run overrides the operator chose.
+function updateStatusExtras() {
+  const parts: string[] = [];
+  if (currentEffort) parts.push(currentEffort);
+  if (currentMaxTurns) parts.push(`${currentMaxTurns} turns`);
+  statusExtras.textContent = parts.length ? ` · ${parts.join(" · ")}` : "";
+}
 
 // Zero shows the model in two places and the web UI follows: titleModelSegment
 // puts "provider/model" at the right of the title bar, and composerDividerLine
@@ -395,6 +417,66 @@ async function handleSlashCommand(text: string): Promise<boolean> {
     }
     return true;
   }
+  // /effort maps to zero exec's --reasoning-effort. Only low, medium, and
+  // high exist; the daemon rejects anything else, so the picker offers just
+  // those plus a way back to the backend's own default.
+  if (text === "/effort" || text.startsWith("/effort ")) {
+    const arg = text.slice("/effort".length).trim().toLowerCase();
+    if (arg) {
+      if (arg !== "default" && !EFFORTS.includes(arg)) {
+        fail(`Unknown effort: ${arg}. Use low, medium, high, or default.`);
+        return true;
+      }
+      currentEffort = arg === "default" ? undefined : arg;
+      saveUIState();
+      updateStatusExtras();
+      systemMessage(`Reasoning effort ${currentEffort ?? "left to the model default"}`);
+      return true;
+    }
+    const items = [
+      { group: "Reasoning effort", label: "default", value: "default", meta: "leave it to the backend", provider: "" },
+      ...EFFORTS.map((e) => ({
+        group: "Reasoning effort",
+        label: e,
+        value: e,
+        meta: e === currentEffort ? "current" : "",
+        provider: "",
+      })),
+    ];
+    const picked = await openPicker("Reasoning effort", items);
+    if (picked) {
+      currentEffort = picked.value === "default" ? undefined : picked.value;
+      saveUIState();
+      updateStatusExtras();
+      systemMessage(`Reasoning effort ${currentEffort ?? "left to the model default"}`);
+    }
+    return true;
+  }
+  // /turns maps to --max-turns, a per-run ceiling on agent loop turns.
+  if (text === "/turns" || text.startsWith("/turns ")) {
+    const arg = text.slice("/turns".length).trim();
+    if (!arg) {
+      systemMessage(`Tool-turn budget: ${currentMaxTurns ?? "backend default"}. Set with /turns <n>, clear with /turns default.`);
+      return true;
+    }
+    if (arg.toLowerCase() === "default") {
+      currentMaxTurns = undefined;
+      saveUIState();
+      updateStatusExtras();
+      systemMessage("Tool-turn budget left to the backend default.");
+      return true;
+    }
+    const n = Number(arg);
+    if (!Number.isInteger(n) || n < 1 || n > 1000) {
+      fail(`Turn budget must be a whole number from 1 to 1000, got ${arg}.`);
+      return true;
+    }
+    currentMaxTurns = n;
+    saveUIState();
+    updateStatusExtras();
+    systemMessage(`Tool-turn budget set to ${n}.`);
+    return true;
+  }
   if (text === "/status") {
     try {
       const s = await fetchStatus(authToken);
@@ -505,6 +587,8 @@ const COMMANDS: CatalogItem[] = [
   { group: "Commands", label: "/conversation", value: "/conversation", meta: "Switch conversation", provider: "" },
   { group: "Commands", label: "/theme", value: "/theme", meta: "Choose a UI colour theme", provider: "" },
   { group: "Commands", label: "/status", value: "/status", meta: "Show agent, container, and model", provider: "" },
+  { group: "Commands", label: "/effort", value: "/effort", meta: "Set reasoning effort", provider: "" },
+  { group: "Commands", label: "/turns", value: "/turns", meta: "Set the tool-turn budget", provider: "" },
   { group: "Commands", label: "/new", value: "/new", meta: "Reset this conversation's session", provider: "" },
   { group: "Commands", label: "/retry", value: "/retry", meta: "Resend the last prompt", provider: "" },
   { group: "Commands", label: "/copy", value: "/copy", meta: "Copy the last reply", provider: "" },
@@ -757,7 +841,12 @@ async function sendTurn() {
       authToken,
       conversation,
       prompt,
-      { provider: currentProvider, model: currentModel },
+      {
+        provider: currentProvider,
+        model: currentModel,
+        reasoningEffort: currentEffort,
+        maxTurns: currentMaxTurns,
+      },
       turn.onEvent,
       inFlight.signal,
     );
@@ -800,6 +889,7 @@ async function main() {
   loadUIState();
   applyTheme(currentTheme);
   updateModelIndicator();
+  updateStatusExtras();
 
   try {
     const status = await fetchStatus(authToken);

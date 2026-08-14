@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -131,6 +132,12 @@ func buildZeroArgs(opts TurnOptions) []string {
 	}
 	if opts.Autonomy != "" {
 		args = append(args, "--auto", opts.Autonomy)
+	}
+	if opts.ReasoningEffort != "" {
+		args = append(args, "--reasoning-effort", opts.ReasoningEffort)
+	}
+	if opts.MaxTurns > 0 {
+		args = append(args, "--max-turns", strconv.Itoa(opts.MaxTurns))
 	}
 	if opts.Attended {
 		args = append(args, "--no-completion-gate")

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -26,6 +27,18 @@ func (stubDriver) Turn(context.Context, agent.TurnOptions, func(agent.Event)) (a
 
 func (d stubDriver) Defaults(context.Context, string) (agent.Defaults, error) {
 	return d.defaults, d.defaultsErr
+}
+
+// capturingDriver records the options it was handed so a test can assert
+// what the daemon forwarded.
+type capturingDriver struct {
+	stubDriver
+	opts agent.TurnOptions
+}
+
+func (d *capturingDriver) Turn(_ context.Context, opts agent.TurnOptions, _ func(agent.Event)) (agent.TurnResult, error) {
+	d.opts = opts
+	return agent.TurnResult{Status: "success"}, nil
 }
 
 func newTestServer() *server {
@@ -215,6 +228,49 @@ func TestHandleDeleteConversationRequiresName(t *testing.T) {
 
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("delete without a name = %d, want 400", rec.Code)
+	}
+}
+
+// The turn options a browser can set are validated at the boundary so a bad
+// value fails here with a clear message instead of deep inside the container.
+func TestHandleTurnRejectsBadOptions(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{"unknown effort", `{"prompt":"hi","reasoningEffort":"ultra"}`},
+		{"negative turns", `{"prompt":"hi","maxTurns":-1}`},
+		{"absurd turns", `{"prompt":"hi","maxTurns":100000}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newTestServer()
+			s.sessions = mustSessionStore(t)
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/turn", strings.NewReader(tc.body))
+			s.handleTurn(rec, req)
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("status = %d, want 400 (body %s)", rec.Code, tc.body)
+			}
+		})
+	}
+}
+
+// A valid effort must survive validation and reach the driver.
+func TestHandleTurnForwardsOptions(t *testing.T) {
+	s := newTestServer()
+	s.sessions = mustSessionStore(t)
+	captured := &capturingDriver{}
+	s.driver = captured
+
+	rec := httptest.NewRecorder()
+	body := `{"prompt":"hi","reasoningEffort":"high","maxTurns":7}`
+	s.handleTurn(rec, httptest.NewRequest(http.MethodPost, "/turn", strings.NewReader(body)))
+
+	if captured.opts.ReasoningEffort != "high" {
+		t.Errorf("ReasoningEffort = %q, want high", captured.opts.ReasoningEffort)
+	}
+	if captured.opts.MaxTurns != 7 {
+		t.Errorf("MaxTurns = %d, want 7", captured.opts.MaxTurns)
 	}
 }
 

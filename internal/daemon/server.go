@@ -35,7 +35,23 @@ type TurnRequest struct {
 	// Autonomy defaults to high: inside the container boundary the agent runs
 	// unattended and there is no user present to answer permission prompts.
 	Autonomy string `json:"autonomy,omitempty"`
+	// ReasoningEffort is low, medium, or high. Empty leaves the backend's
+	// own default alone.
+	ReasoningEffort string `json:"reasoningEffort,omitempty"`
+	// MaxTurns caps the agent loop's tool turns for this run; 0 means leave
+	// the backend default.
+	MaxTurns int `json:"maxTurns,omitempty"`
 }
+
+// validReasoningEfforts are the values zero's model registry advertises.
+// Anything else is rejected rather than forwarded, so a bad value fails
+// here with a clear message instead of inside the container.
+var validReasoningEfforts = map[string]bool{"low": true, "medium": true, "high": true}
+
+// maxTurnsCeiling is a sanity bound on a browser-supplied loop budget. The
+// backend has its own default; this only stops an absurd value being passed
+// through.
+const maxTurnsCeiling = 1000
 
 // Trailer is the final JSONL line of a /turn response, after the raw driver
 // events.
@@ -350,6 +366,14 @@ func (s *server) handleTurn(w http.ResponseWriter, r *http.Request) {
 	if req.Autonomy == "" {
 		req.Autonomy = "high"
 	}
+	if req.ReasoningEffort != "" && !validReasoningEfforts[req.ReasoningEffort] {
+		http.Error(w, "reasoningEffort must be low, medium, or high", http.StatusBadRequest)
+		return
+	}
+	if req.MaxTurns < 0 || req.MaxTurns > maxTurnsCeiling {
+		http.Error(w, fmt.Sprintf("maxTurns must be between 1 and %d", maxTurnsCeiling), http.StatusBadRequest)
+		return
+	}
 
 	lock := s.convLock(req.Conversation)
 	lock.Lock()
@@ -373,6 +397,9 @@ func (s *server) handleTurn(w http.ResponseWriter, r *http.Request) {
 		Model:     req.Model,
 		Autonomy:  req.Autonomy,
 		Attended:  true, // /turn callers (chat, exec) have an operator present
+
+		ReasoningEffort: req.ReasoningEffort,
+		MaxTurns:        req.MaxTurns,
 	}
 	res, err := s.driver.Turn(r.Context(), opts, func(ev agent.Event) { emit(ev) })
 	trailer := Trailer{Type: "zeroclaw_result", SessionID: res.SessionID, Status: res.Status, Final: res.Final}
