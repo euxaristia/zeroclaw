@@ -89,6 +89,10 @@ html, body {
   color: var(--muted);
 }
 
+#model-indicator .ctx {
+  color: var(--faint);
+}
+
 #conv-input:focus,
 #prompt-input:focus {
   outline: none;

@@ -263,6 +263,16 @@ func (s *server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	if def, err := s.driver.Defaults(ctx, s.container); err == nil {
 		body["provider"] = def.Provider
 		body["model"] = def.Model
+		// The backend's registry does not enumerate every gateway-routed
+		// model id, so fall back to the curated catalog before giving up.
+		window := def.ContextWindow
+		if window == 0 {
+			window = catalog.ContextWindowFor(def.Model)
+		}
+		if window > 0 {
+			body["contextWindow"] = window
+			body["contextWindowLabel"] = catalog.FormatContextWindow(window)
+		}
 	}
 	_ = json.NewEncoder(w).Encode(body)
 }

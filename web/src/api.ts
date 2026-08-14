@@ -38,6 +38,9 @@ export interface StatusResponse {
   // reach the backend to ask.
   provider?: string;
   model?: string;
+  // Context size of the active model, absent when unknown.
+  contextWindow?: number;
+  contextWindowLabel?: string;
 }
 
 // Mirrors internal/catalog.Item.

@@ -76,7 +76,39 @@ func (ZeroDriver) Defaults(ctx context.Context, container string) (Defaults, err
 			break
 		}
 	}
+	res.ContextWindow = zeroModelContextWindow(ctx, container, res.Model)
 	return res, nil
+}
+
+// zeroModelContextWindow looks the model up in zero's own model registry,
+// the same source its TUI uses for the context figure in its title bar.
+// Returns 0 for anything the registry does not list (gateway-routed ids
+// commonly are not), which callers treat as "unknown" rather than an error.
+func zeroModelContextWindow(ctx context.Context, container, model string) int {
+	if model == "" {
+		return 0
+	}
+	cmd := env.DockerCommandContext(ctx, "exec", container, "zero", "models", "--json")
+	out, err := cmd.Output()
+	if err != nil {
+		return 0
+	}
+	var reg struct {
+		Models []struct {
+			ID            string `json:"id"`
+			APIModel      string `json:"apiModel"`
+			ContextWindow int    `json:"contextWindow"`
+		} `json:"models"`
+	}
+	if json.Unmarshal(out, &reg) != nil {
+		return 0
+	}
+	for _, m := range reg.Models {
+		if strings.EqualFold(m.ID, model) || strings.EqualFold(m.APIModel, model) {
+			return m.ContextWindow
+		}
+	}
+	return 0
 }
 
 func buildZeroArgs(opts TurnOptions) []string {

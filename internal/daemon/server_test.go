@@ -114,6 +114,53 @@ func TestHandleStatus(t *testing.T) {
 	}
 }
 
+// Zero's model registry does not enumerate gateway-routed model ids, so a
+// zero ContextWindow from the driver must fall back to the curated catalog
+// rather than reporting nothing.
+func TestHandleStatusFallsBackToCatalogContextWindow(t *testing.T) {
+	s := newTestServer()
+	s.sessions = mustSessionStore(t)
+	s.driver = stubDriver{defaults: agent.Defaults{
+		Provider: "gitlawb-opengateway",
+		Model:    "nvidia/nemotron-3-ultra-550b-a55b:free",
+		// Registry miss.
+		ContextWindow: 0,
+	}}
+
+	rec := httptest.NewRecorder()
+	s.handleStatus(rec, httptest.NewRequest(http.MethodGet, "/status", nil))
+
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("status body not json: %v", err)
+	}
+	if got, ok := body["contextWindow"].(float64); !ok || int(got) != 128000 {
+		t.Errorf("contextWindow = %v, want 128000 from the catalog fallback", body["contextWindow"])
+	}
+	if body["contextWindowLabel"] != "128K ctx" {
+		t.Errorf("contextWindowLabel = %v, want 128K ctx", body["contextWindowLabel"])
+	}
+}
+
+// An unknown model reports no context window at all rather than a zero,
+// mirroring zero's own "only render it when > 0".
+func TestHandleStatusOmitsUnknownContextWindow(t *testing.T) {
+	s := newTestServer()
+	s.sessions = mustSessionStore(t)
+	s.driver = stubDriver{defaults: agent.Defaults{Provider: "custom", Model: "not-a-real-model"}}
+
+	rec := httptest.NewRecorder()
+	s.handleStatus(rec, httptest.NewRequest(http.MethodGet, "/status", nil))
+
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("status body not json: %v", err)
+	}
+	if _, ok := body["contextWindow"]; ok {
+		t.Errorf("contextWindow should be absent for an unknown model, got %v", body["contextWindow"])
+	}
+}
+
 // A container that is down must degrade /status, not break it: the fields
 // are display sugar for the web UI's model indicator.
 func TestHandleStatusOmitsDefaultsOnError(t *testing.T) {

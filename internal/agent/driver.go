@@ -74,6 +74,10 @@ type TurnResult struct {
 type Defaults struct {
 	Provider string
 	Model    string
+	// ContextWindow is the active model's context size in tokens, 0 when
+	// the backend does not know it (its registry need not enumerate every
+	// gateway-routed model id).
+	ContextWindow int
 }
 
 type Driver interface {

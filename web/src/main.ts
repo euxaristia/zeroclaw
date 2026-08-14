@@ -18,6 +18,7 @@ let currentProvider: string | undefined;
 let currentModel: string | undefined;
 let inFlight: AbortController | null = null;
 let currentTheme = defaultTheme().name;
+let currentContextLabel = "";
 
 // Mirrors internal/tui/model.go's inputHistory/historyIdx/historyDraft: Up
 // walks back through previously sent prompts, Down walks forward, and the
@@ -138,12 +139,21 @@ function updateModelIndicator() {
   const provider = currentProvider?.trim() ?? "";
   const model = currentModel?.trim() ?? "";
 
+  modelIndicator.replaceChildren();
   if (!provider && !model) {
     modelIndicator.textContent = "no provider";
     modelIndicator.classList.add("unset");
   } else {
-    modelIndicator.textContent = provider && model ? `${provider}/${model}` : model || provider;
     modelIndicator.classList.remove("unset");
+    modelIndicator.append(provider && model ? `${provider}/${model}` : model || provider);
+    // titleBar appends the context window in faint after the model, and
+    // only when it is known.
+    if (currentContextLabel) {
+      const ctx = document.createElement("span");
+      ctx.className = "ctx";
+      ctx.textContent = ` · ${currentContextLabel}`;
+      modelIndicator.appendChild(ctx);
+    }
   }
 
   composerModel.textContent = model || "no model";
@@ -665,6 +675,9 @@ async function main() {
     // /provider from a previous session wins over the backend default.
     currentProvider ??= status.provider;
     currentModel ??= status.model;
+    // Only meaningful while the model is the one /status described; a later
+    // /model switch clears it until the next turn or status refresh.
+    if (currentModel === status.model) currentContextLabel = status.contextWindowLabel ?? "";
     updateModelIndicator();
     setStatusReady();
   } catch (err) {
