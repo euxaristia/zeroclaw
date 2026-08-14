@@ -89,6 +89,7 @@ func TestParseAgentAndArgs(t *testing.T) {
 		args      []string
 		wantAgent string
 		wantArgs  []string
+		wantErr   bool
 	}{
 		{
 			name:      "default when empty",
@@ -115,11 +116,42 @@ func TestParseAgentAndArgs(t *testing.T) {
 			wantArgs:  []string{"status"},
 		},
 		{
+			name:      "equal flag -a=bar",
+			args:      []string{"-a=bar", "status"},
+			wantAgent: "bar",
+			wantArgs:  []string{"status"},
+		},
+		{
 			name:      "env var fallback",
 			env:       "staging",
 			args:      []string{"doctor"},
 			wantAgent: "staging",
 			wantArgs:  []string{"doctor"},
+		},
+		{
+			name:    "missing -a value",
+			args:    []string{"-a"},
+			wantErr: true,
+		},
+		{
+			name:    "missing --agent value",
+			args:    []string{"--agent"},
+			wantErr: true,
+		},
+		{
+			name:    "empty --agent= value",
+			args:    []string{"--agent=", "status"},
+			wantErr: true,
+		},
+		{
+			name:    "empty -a= value",
+			args:    []string{"-a=", "status"},
+			wantErr: true,
+		},
+		{
+			name:    "traversal in -a",
+			args:    []string{"-a", "../etc", "status"},
+			wantErr: true,
 		},
 	}
 
@@ -130,7 +162,16 @@ func TestParseAgentAndArgs(t *testing.T) {
 			} else {
 				t.Setenv("ZEROCLAW_AGENT", "")
 			}
-			agent, rest := parseAgentAndArgs(tc.args)
+			agent, rest, err := parseAgentAndArgs(tc.args)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("parseAgentAndArgs(%v) returned nil error, want error", tc.args)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseAgentAndArgs(%v) unexpected error: %v", tc.args, err)
+			}
 			if agent != tc.wantAgent {
 				t.Errorf("agent = %q, want %q", agent, tc.wantAgent)
 			}
@@ -143,6 +184,18 @@ func TestParseAgentAndArgs(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestRunInvalidAgentFlag(t *testing.T) {
+	if err := Run([]string{"-a"}); err == nil {
+		t.Error("Run([-a]) returned nil error, want error")
+	}
+	if err := Run([]string{"--agent="}); err == nil {
+		t.Error("Run([--agent=]) returned nil error, want error")
+	}
+	if err := Run([]string{"-a", "../escape", "status"}); err == nil {
+		t.Error("Run([-a, ../escape, status]) returned nil error, want error")
 	}
 }
 

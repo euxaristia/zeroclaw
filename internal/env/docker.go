@@ -188,55 +188,20 @@ func seed(container string) error {
 	if _, err := docker("exec", container, "sh", "-c", script); err != nil {
 		return err
 	}
-	if err := adoptZeroAuth(container); err != nil {
-		return err
-	}
 	return allowSandboxNetwork(container)
 }
 
 // allowSandboxNetwork opens zero's inner network sandbox inside the container.
-// The host config adopted by adoptZeroAuth carries the host's default (deny),
-// but in here the container is the isolation boundary, so denying egress only
-// strands the agent (it cannot reach GitHub while gh, git, and curl sit
-// installed for exactly that). Only a missing setting is filled in: an
-// operator who deliberately set "deny" in the agent's config keeps it.
+// The host config carries the host's default (deny), but in here the container
+// is the isolation boundary, so denying egress only strands the agent (it cannot
+// reach GitHub while gh, git, and curl sit installed for exactly that).
+// Only a missing setting is filled in: an operator who deliberately set "deny"
+// in the agent's config keeps it.
 func allowSandboxNetwork(container string) error {
 	script := `f=~/.config/zero/config.json
 [ -e "$f" ] || exit 0
 jq '.sandbox.network //= "allow"' "$f" > "$f.tmp" && mv "$f.tmp" "$f"`
 	_, err := docker("exec", container, "sh", "-c", script)
-	return err
-}
-
-// adoptZeroAuth copies the host zero provider config and encrypted credential
-// store into the agent's volume once, so the agent can talk to the same
-// provider as the host zero install. Files are never overwritten on later ups.
-func adoptZeroAuth(container string) error {
-	hostCfg, err := os.UserConfigDir()
-	if err != nil {
-		return nil
-	}
-	src := filepath.Join(hostCfg, "zero")
-	copied := false
-	for _, f := range []string{"config.json", "credentials.enc", "credentials.enc.secret"} {
-		p := filepath.Join(src, f)
-		if !fileExists(p) {
-			continue
-		}
-		if dockerOK("exec", container, "test", "-e", Home+"/.config/zero/"+f) {
-			continue
-		}
-		if _, err := docker("cp", p, container+":"+Home+"/.config/zero/"+f); err != nil {
-			return err
-		}
-		copied = true
-		fmt.Println("adopted host zero", f)
-	}
-	if !copied {
-		return nil
-	}
-	// docker cp writes as root; hand the files to the agent user.
-	_, err = docker("exec", "-u", "root", container, "chown", "-R", "zeroclaw:zeroclaw", Home+"/.config/zero")
 	return err
 }
 
@@ -558,7 +523,7 @@ func Doctor(w io.Writer, agent ...string) error {
 		if backendDoctor != nil {
 			backendDoctor(w, container)
 		}
-		check("zero credentials adopted", dockerOK("exec", container, "test", "-e", Home+"/.config/zero/credentials.enc"), "zeroclaw up copies them from the host zero config")
+		check("zero credentials configured", dockerOK("exec", container, "test", "-e", Home+"/.config/zero/credentials.enc"), "run `zeroclaw auth sync` or `zeroclaw auth login`")
 	}
 	dir, err := envDir()
 	check("env build context", err == nil, "run from the zeroclaw repo")

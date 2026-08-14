@@ -103,6 +103,37 @@ func TestNamedAgentDirAndPath(t *testing.T) {
 	}
 }
 
+func TestValidateAgentName(t *testing.T) {
+	tests := []struct {
+		name    string
+		agent   string
+		wantErr bool
+	}{
+		{"empty is default", "", false},
+		{"default keyword", "default", false},
+		{"valid alphanumeric", "work", false},
+		{"valid with hyphen and underscore", "my-agent_1", false},
+		{"dot segment current", ".", true},
+		{"dot segment parent", "..", true},
+		{"unix path traversal", "../etc", true},
+		{"windows path traversal", `..\etc`, true},
+		{"slash contained", "foo/bar", true},
+		{"backslash contained", `foo\bar`, true},
+		{"colon contained", "foo:bar", true},
+		{"null byte contained", "foo\x00bar", true},
+		{"invalid symbols", "agent$name", true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateAgentName(tc.agent)
+			if (err != nil) != tc.wantErr {
+				t.Errorf("ValidateAgentName(%q) err = %v, wantErr = %v", tc.agent, err, tc.wantErr)
+			}
+		})
+	}
+}
+
 func TestLoadDefault(t *testing.T) {
 	tmp := withTempHome(t)
 

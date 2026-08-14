@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"zeroclaw/internal/agent"
+	"zeroclaw/internal/config"
 	"zeroclaw/internal/daemon"
 	"zeroclaw/internal/env"
 	"zeroclaw/internal/tui"
@@ -41,7 +42,7 @@ const usage = `usage: zeroclaw [-a <agent>] <command>
 Options:
   -a, --agent <name>    select agent profile (default: default, env: ZEROCLAW_AGENT)`
 
-func parseAgentAndArgs(args []string) (string, []string) {
+func parseAgentAndArgs(args []string) (string, []string, error) {
 	agentName := os.Getenv("ZEROCLAW_AGENT")
 	if agentName == "" {
 		agentName = "default"
@@ -50,27 +51,42 @@ func parseAgentAndArgs(args []string) (string, []string) {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "-a" || arg == "--agent" {
-			if i+1 < len(args) {
-				agentName = args[i+1]
-				i++
-				continue
+			if i+1 >= len(args) || args[i+1] == "" {
+				return "", nil, fmt.Errorf("flag %s requires a non-empty argument", arg)
 			}
+			agentName = args[i+1]
+			i++
+			continue
 		} else if strings.HasPrefix(arg, "--agent=") {
-			agentName = strings.TrimPrefix(arg, "--agent=")
+			val := strings.TrimPrefix(arg, "--agent=")
+			if val == "" {
+				return "", nil, fmt.Errorf("flag --agent requires a non-empty argument")
+			}
+			agentName = val
 			continue
 		} else if strings.HasPrefix(arg, "-a=") {
-			agentName = strings.TrimPrefix(arg, "-a=")
+			val := strings.TrimPrefix(arg, "-a=")
+			if val == "" {
+				return "", nil, fmt.Errorf("flag -a requires a non-empty argument")
+			}
+			agentName = val
 			continue
 		}
 		rest = append(rest, arg)
 	}
-	return agentName, rest
+	if err := config.ValidateAgentName(agentName); err != nil {
+		return "", nil, err
+	}
+	return agentName, rest, nil
 }
 
 // Run dispatches a zeroclaw CLI invocation. Everything except up, doctor, and
 // the env file-copy commands is a thin RPC client of zeroclawd.
 func Run(args []string) error {
-	agentName, args := parseAgentAndArgs(args)
+	agentName, args, err := parseAgentAndArgs(args)
+	if err != nil {
+		return err
+	}
 	if len(args) == 0 {
 		return errors.New(usage)
 	}
@@ -217,18 +233,23 @@ func listAgents(w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "%-12s %-20s %-22s %-12s %-20s\n", "AGENT", "CONTAINER", "VOLUME", "STATUS", "DAEMON")
-	fmt.Fprintln(w, strings.Repeat("-", 90))
+	fmt.Fprintf(w, "%-12s %-20s %-12s %-22s %-12s %-20s\n", "AGENT", "CONTAINER", "STATUS", "VOLUME", "VOL STATUS", "DAEMON")
+	fmt.Fprintln(w, strings.Repeat("-", 104))
 	for _, s := range summaries {
 		daemonStatus := "not running"
 		if info, ok := daemon.Running(s.Name); ok {
 			daemonStatus = fmt.Sprintf("running (pid %d)", info.PID)
 		}
-		fmt.Fprintf(w, "%-12s %-20s %-22s %-12s %-20s\n",
+		volStatus := "absent"
+		if s.VolumePresent {
+			volStatus = "present"
+		}
+		fmt.Fprintf(w, "%-12s %-20s %-12s %-22s %-12s %-20s\n",
 			s.Name,
 			s.Container,
-			s.Volume,
 			s.ContainerStatus,
+			s.Volume,
+			volStatus,
 			daemonStatus,
 		)
 	}

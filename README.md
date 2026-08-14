@@ -130,7 +130,7 @@ zeroclaw [-a <agent>] doctor    diagnose setup
 zeroclaw [-a <agent>] auth      manage container zero auth (interactive login or sync host credentials)
 zeroclaw [-a <agent>] reset-container remove disposable container (preserves volume & home data)
 zeroclaw [-a <agent>] reset-env --force destroy the environment and the agent's home
-zeroclaw [-a <agent>] daemon run|stop run zeroclawd in the foreground / stop it
+zeroclaw [-a <agent>] daemon start|run|stop start, run in foreground, or stop zeroclawd
 ```
 
 ## Autonomy and memory 🧠

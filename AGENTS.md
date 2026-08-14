@@ -79,11 +79,10 @@ one. Zero's sandbox is excellent as the inner layer, insufficient as the outer o
 - Network: the container gets normal egress (it needs the model API and GitHub).
   Host isolation is the goal of tier 1, not network isolation. An egress
   allowlist proxy is a later hardening item, listed under open questions.
-- Secrets: on first `zeroclaw up`, the host zero provider config and encrypted
-  credential store (`config.json`, `credentials.enc`, `credentials.enc.secret`)
-  are copied once into the agent's volume (`adoptZeroAuth`), so the agent talks
-  to the same provider as the host zero install. Never baked into the image;
-  never overwritten on later ups.
+- Secrets: credentials and provider config are never baked into the image.
+  Run `zeroclaw auth sync` to copy host zero credentials into an agent's
+  volume, or `zeroclaw auth login` to authenticate interactively inside the
+  container.
 
 ### Tier 2: zero's sandbox inside the container
 
@@ -166,7 +165,7 @@ host                                    container (zeroclaw-env)
   (ZEROCLAW.md identity + operating rules, MEMORY.md index, HEARTBEAT.md). The
   identity prompt instructs the agent to persist facts and to write zero skills
   after complex tasks, hermes-style. No code needed beyond seeding and prompts.
-- **CLI surface**: `zeroclaw [-a <name>] up | down | status | chat | exec "<prompt>" | list | reset-container | reset-env | give | take | beat | doctor | daemon start|run|stop`.
+- **CLI surface**: `zeroclaw [-a <name>] up | down | status | chat | exec "<prompt>" | list | reset-container | reset-env --force | give | take | beat | doctor | auth [sync|login] | daemon start|run|stop`.
 
 ## Stack
 
