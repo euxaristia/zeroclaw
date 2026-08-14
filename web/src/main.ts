@@ -256,6 +256,24 @@ async function handleSlashCommand(text: string): Promise<boolean> {
     if (picked) switchConversation(picked.value);
     return true;
   }
+  if (text === "/status") {
+    try {
+      const s = await fetchStatus(authToken);
+      systemMessage(
+        [
+          `agent         ${s.agent}`,
+          `container     ${s.container}`,
+          `daemon pid    ${s.pid}`,
+          `conversations ${s.conversations}`,
+          `provider      ${s.provider ?? "unknown"}`,
+          `model         ${s.model ?? "unknown"}`,
+        ].join("\n"),
+      );
+    } catch (err) {
+      fail(err instanceof Error ? err.message : String(err));
+    }
+    return true;
+  }
   if (text === "/theme" || text.startsWith("/theme ")) {
     const arg = text.slice("/theme".length).trim();
     if (arg) {
@@ -347,6 +365,7 @@ const COMMANDS: CatalogItem[] = [
   { group: "Commands", label: "/provider", value: "/provider", meta: "Choose or switch model provider", provider: "" },
   { group: "Commands", label: "/conversation", value: "/conversation", meta: "Switch conversation", provider: "" },
   { group: "Commands", label: "/theme", value: "/theme", meta: "Choose a UI colour theme", provider: "" },
+  { group: "Commands", label: "/status", value: "/status", meta: "Show agent, container, and model", provider: "" },
   { group: "Commands", label: "/help", value: "/help", meta: "Show available commands", provider: "" },
   { group: "Commands", label: "/clear", value: "/clear", meta: "Clear chat transcript", provider: "" },
 ];
@@ -361,6 +380,16 @@ let paletteSelected = 0;
 
 function renderPalette() {
   palette.replaceChildren();
+  // An unrecognized command used to just hide the palette, which reads as
+  // "the UI stopped responding" rather than "no such command".
+  if (paletteItems.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "picker-empty";
+    empty.textContent = "no matching command";
+    palette.appendChild(empty);
+    palette.hidden = false;
+    return;
+  }
   paletteItems.forEach((item, i) => {
     const row = document.createElement("div");
     row.className = "picker-row" + (i === paletteSelected ? " selected" : "");
@@ -732,7 +761,16 @@ async function main() {
 
 function autoGrow() {
   promptInput.style.height = "auto";
-  promptInput.style.height = `${promptInput.scrollHeight}px`;
+  // scrollHeight excludes the border under border-box, so using it directly
+  // leaves the box a couple of pixels short and the browser shows a
+  // scrollbar on a single-line input. Add the borders back, and only allow
+  // scrolling once the content actually exceeds the max height.
+  const style = getComputedStyle(promptInput);
+  const borders = parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
+  const needed = promptInput.scrollHeight + borders;
+  const max = parseFloat(style.maxHeight);
+  promptInput.style.height = `${needed}px`;
+  promptInput.style.overflowY = Number.isFinite(max) && needed > max ? "auto" : "hidden";
 }
 
 void main();
