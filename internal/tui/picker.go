@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+
+	"zeroclaw/internal/catalog"
 )
 
 type pickerKind int
@@ -92,66 +94,7 @@ func (p *commandPicker) applyQuery() {
 }
 
 func (m model) newModelPicker() *commandPicker {
-	var allItems []pickerItem
-
-	// GitLawb OpenGateway
-	allItems = append(allItems,
-		pickerItem{Group: "GitLawb OpenGateway", Label: "NVIDIA Nemotron 3 Ultra 550B (Free)", Value: "nvidia/nemotron-3-ultra-550b-a55b:free", Meta: "128K ctx · free", Provider: "gitlawb-opengateway"},
-		pickerItem{Group: "GitLawb OpenGateway", Label: "Mimo v2.5 Pro", Value: "mimo-v2.5-pro", Meta: "128K ctx · smart-route", Provider: "gitlawb-opengateway"},
-		pickerItem{Group: "GitLawb OpenGateway", Label: "Qwen 3 Coder 480B", Value: "qwen3-coder:480b", Meta: "128K ctx · code", Provider: "gitlawb-opengateway"},
-	)
-
-	// OpenRouter
-	allItems = append(allItems,
-		pickerItem{Group: "OpenRouter", Label: "DeepSeek V4 Pro", Value: "deepseek/deepseek-v4-pro", Meta: "1M ctx · tools", Provider: "openrouter"},
-		pickerItem{Group: "OpenRouter", Label: "DeepSeek V4 Flash", Value: "deepseek/deepseek-v4-flash-0731", Meta: "1M ctx · fast · tools", Provider: "openrouter"},
-		pickerItem{Group: "OpenRouter", Label: "Claude Sonnet 4.5", Value: "anthropic/claude-sonnet-4.5", Meta: "200K ctx · tools · vision", Provider: "openrouter"},
-		pickerItem{Group: "OpenRouter", Label: "Claude Haiku 4.5", Value: "anthropic/claude-haiku-4.5", Meta: "200K ctx · fast · tools", Provider: "openrouter"},
-		pickerItem{Group: "OpenRouter", Label: "Gemini 2.5 Flash", Value: "google/gemini-2.5-flash", Meta: "1M ctx · fast · vision", Provider: "openrouter"},
-		pickerItem{Group: "OpenRouter", Label: "Gemini 2.5 Pro", Value: "google/gemini-2.5-pro", Meta: "1M ctx · reasoning · vision", Provider: "openrouter"},
-		pickerItem{Group: "OpenRouter", Label: "GPT-4.1", Value: "openai/gpt-4.1", Meta: "1M ctx · tools · vision", Provider: "openrouter"},
-		pickerItem{Group: "OpenRouter", Label: "GPT-4.1 Mini", Value: "openai/gpt-4.1-mini", Meta: "1M ctx · fast · tools", Provider: "openrouter"},
-		pickerItem{Group: "OpenRouter", Label: "o3-mini", Value: "openai/o3-mini", Meta: "200K ctx · reasoning", Provider: "openrouter"},
-		pickerItem{Group: "OpenRouter", Label: "Llama 3.3 70B Instruct", Value: "meta-llama/llama-3.3-70b-instruct", Meta: "128K ctx · tools", Provider: "openrouter"},
-	)
-
-	// Anthropic Direct
-	allItems = append(allItems,
-		pickerItem{Group: "Anthropic", Label: "Claude Sonnet 4.5", Value: "claude-sonnet-4.5", Meta: "200K ctx · tools · vision", Provider: "anthropic"},
-		pickerItem{Group: "Anthropic", Label: "Claude Haiku 4.5", Value: "claude-haiku-4.5", Meta: "200K ctx · fast · tools", Provider: "anthropic"},
-		pickerItem{Group: "Anthropic", Label: "Claude Opus 4.1", Value: "claude-opus-4.1", Meta: "200K ctx · reasoning", Provider: "anthropic"},
-	)
-
-	// OpenAI Direct
-	allItems = append(allItems,
-		pickerItem{Group: "OpenAI", Label: "GPT-4.1", Value: "gpt-4.1", Meta: "1M ctx · tools · vision", Provider: "openai"},
-		pickerItem{Group: "OpenAI", Label: "GPT-4.1 Mini", Value: "gpt-4.1-mini", Meta: "1M ctx · fast · tools", Provider: "openai"},
-		pickerItem{Group: "OpenAI", Label: "GPT-4.1 Nano", Value: "gpt-4.1-nano", Meta: "1M ctx · fast · lightweight", Provider: "openai"},
-		pickerItem{Group: "OpenAI", Label: "o3-mini", Value: "o3-mini", Meta: "200K ctx · reasoning", Provider: "openai"},
-		pickerItem{Group: "OpenAI", Label: "o1", Value: "o1", Meta: "200K ctx · reasoning", Provider: "openai"},
-		pickerItem{Group: "OpenAI", Label: "GPT-4o", Value: "gpt-4o", Meta: "128K ctx · tools · vision", Provider: "openai"},
-		pickerItem{Group: "OpenAI", Label: "GPT-4o Mini", Value: "gpt-4o-mini", Meta: "128K ctx · fast · tools", Provider: "openai"},
-	)
-
-	// DeepSeek Direct
-	allItems = append(allItems,
-		pickerItem{Group: "DeepSeek", Label: "DeepSeek V4 Pro", Value: "deepseek-chat", Meta: "1M ctx · tools", Provider: "deepseek"},
-		pickerItem{Group: "DeepSeek", Label: "DeepSeek V4 Flash", Value: "deepseek-reasoner", Meta: "1M ctx · fast · reasoning", Provider: "deepseek"},
-	)
-
-	// Google Direct
-	allItems = append(allItems,
-		pickerItem{Group: "Google AI", Label: "Gemini 2.5 Flash", Value: "gemini-2.5-flash", Meta: "1M ctx · fast · vision", Provider: "google"},
-		pickerItem{Group: "Google AI", Label: "Gemini 2.5 Pro", Value: "gemini-2.5-pro", Meta: "1M ctx · reasoning · vision", Provider: "google"},
-		pickerItem{Group: "Google AI", Label: "Gemini 2.5 Flash-Lite", Value: "gemini-2.5-flash-lite", Meta: "1M ctx · fast · lightweight", Provider: "google"},
-	)
-
-	// Ollama Local
-	allItems = append(allItems,
-		pickerItem{Group: "Ollama (Local)", Label: "Llama 3.3 70B", Value: "llama3.3", Meta: "local", Provider: "ollama"},
-		pickerItem{Group: "Ollama (Local)", Label: "Qwen 2.5 Coder 32B", Value: "qwen2.5-coder", Meta: "local · code", Provider: "ollama"},
-		pickerItem{Group: "Ollama (Local)", Label: "DeepSeek R1 Distill 32B", Value: "deepseek-r1", Meta: "local · reasoning", Provider: "ollama"},
-	)
+	allItems := fromCatalogItems(catalog.StaticModels(""))
 
 	// Provider gating: if an active provider is set, check fetchedModels first, or filter allItems
 	activeProvider := strings.TrimSpace(m.providerName)
@@ -219,17 +162,7 @@ func (m model) newModelPicker() *commandPicker {
 }
 
 func (m model) newProviderPicker() *commandPicker {
-	items := []pickerItem{
-		{Group: "Providers", Label: "GitLawb OpenGateway", Value: "gitlawb-opengateway", Meta: "smart-routing gateway"},
-		{Group: "Providers", Label: "OpenRouter", Value: "openrouter", Meta: "multi-provider gateway"},
-		{Group: "Providers", Label: "Anthropic", Value: "anthropic", Meta: "Claude models"},
-		{Group: "Providers", Label: "OpenAI", Value: "openai", Meta: "GPT & o-series models"},
-		{Group: "Providers", Label: "DeepSeek", Value: "deepseek", Meta: "V4 Pro & Flash models"},
-		{Group: "Providers", Label: "Google AI", Value: "google", Meta: "Gemini models"},
-		{Group: "Providers", Label: "Ollama (Local)", Value: "ollama", Meta: "Local models"},
-		{Group: "Providers", Label: "AIMLAPI", Value: "aimlapi", Meta: "AI/ML API gateway"},
-		{Group: "Providers", Label: "Custom (OpenAI-compatible)", Value: "custom-openai-compatible", Meta: "Custom endpoint"},
-	}
+	items := fromCatalogItems(catalog.Providers())
 
 	selected := 0
 	if m.providerName != "" {

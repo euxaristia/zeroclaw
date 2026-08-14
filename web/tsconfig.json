@@ -10,5 +10,5 @@
     "noEmit": true,
     "types": ["bun-types"]
   },
-  "include": ["src"]
+  "include": ["src", "build.ts"]
 }
