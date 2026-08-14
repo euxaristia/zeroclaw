@@ -1,4 +1,13 @@
-import { readToken, fetchStatus, fetchProviders, fetchModels, streamTurn, type AgentEvent, type CatalogItem } from "./api";
+import {
+  readToken,
+  fetchStatus,
+  fetchProviders,
+  fetchModels,
+  fetchConversations,
+  streamTurn,
+  type AgentEvent,
+  type CatalogItem,
+} from "./api";
 import { openPicker } from "./picker";
 import { renderMarkdown } from "./markdown";
 
@@ -27,12 +36,25 @@ const welcomeText = "zeroclaw web. Type /help for commands.";
 const TRANSCRIPT_KEY = "zeroclaw_transcript";
 const STATE_KEY = "zeroclaw_ui_state";
 
+// Transcripts are stored per conversation. Each conversation is a separate
+// zero session on the daemon, so showing one conversation's history while
+// another is selected would misrepresent what the agent actually remembers.
+// activeConversation is the single source of truth for which conversation
+// is selected. Reading it back off the input element instead would go stale
+// the moment a switch happens through a path that doesn't touch the input
+// (the /conversation picker), and transcripts would save under the wrong key.
+let activeConversation = "main";
+
+function transcriptKey(conversation = activeConversation): string {
+  return `${TRANSCRIPT_KEY}:${conversation}`;
+}
+
 function saveTranscript() {
   const blocks = Array.from(transcript.children).map((el) => ({
     className: el.className,
     html: el.innerHTML,
   }));
-  sessionStorage.setItem(TRANSCRIPT_KEY, JSON.stringify(blocks));
+  sessionStorage.setItem(transcriptKey(), JSON.stringify(blocks));
 }
 
 // loadTranscript replays a saved transcript's markup back into the DOM. The
@@ -40,7 +62,7 @@ function saveTranscript() {
 // from user- or model-supplied raw HTML, so re-injecting it here doesn't
 // introduce anything that wasn't already safely escaped on the way in.
 function loadTranscript(): boolean {
-  const raw = sessionStorage.getItem(TRANSCRIPT_KEY);
+  const raw = sessionStorage.getItem(transcriptKey());
   if (!raw) return false;
   let blocks: { className: string; html: string }[];
   try {
@@ -62,7 +84,7 @@ function loadTranscript(): boolean {
 function saveUIState() {
   sessionStorage.setItem(
     STATE_KEY,
-    JSON.stringify({ model: currentModel, provider: currentProvider, conversation: convInput.value }),
+    JSON.stringify({ model: currentModel, provider: currentProvider, conversation: activeConversation }),
   );
 }
 
@@ -73,7 +95,10 @@ function loadUIState() {
     const state = JSON.parse(raw) as { model?: string; provider?: string; conversation?: string };
     currentModel = state.model;
     currentProvider = state.provider;
-    if (state.conversation) convInput.value = state.conversation;
+    if (state.conversation) {
+      activeConversation = state.conversation;
+      convInput.value = state.conversation;
+    }
   } catch {
     // ignore malformed state
   }
@@ -101,6 +126,27 @@ function fail(message: string) {
   saveTranscript();
 }
 
+// switchConversation swaps which zero session turns go to. The outgoing
+// transcript is saved and the incoming one restored, so each conversation
+// keeps its own visible history.
+function switchConversation(name: string) {
+  const target = name.trim() || "main";
+  if (target === activeConversation) {
+    convInput.value = target;
+    return;
+  }
+  saveTranscript();
+  activeConversation = target;
+  convInput.value = target;
+  saveUIState();
+  transcript.replaceChildren();
+  if (!loadTranscript()) {
+    appendBlock("welcome").textContent = `${welcomeText}\nconversation: ${target}`;
+    saveTranscript();
+  }
+  systemMessage(`Switched conversation to ${target}`);
+}
+
 function setSendButtonStopping(stopping: boolean) {
   sendBtn.textContent = stopping ? "Stop" : "Send";
   sendBtn.classList.toggle("stopping", stopping);
@@ -124,10 +170,11 @@ async function handleSlashCommand(text: string): Promise<boolean> {
   if (text === "/help" || text === "/?" || text === "/h") {
     systemMessage(
       "zeroclaw web commands:\n" +
-        "  /model [name]      Choose or switch active LLM model\n" +
-        "  /provider [name]   Choose or switch model provider\n" +
-        "  /help              Show available commands\n" +
-        "  /clear             Clear chat transcript",
+        "  /model [name]         Choose or switch active LLM model\n" +
+        "  /provider [name]      Choose or switch model provider\n" +
+        "  /conversation [name]  Switch conversation (own session + history)\n" +
+        "  /help                 Show available commands\n" +
+        "  /clear                Clear chat transcript",
     );
     return true;
   }
@@ -135,6 +182,24 @@ async function handleSlashCommand(text: string): Promise<boolean> {
     transcript.replaceChildren();
     appendBlock("welcome").textContent = welcomeText;
     saveTranscript();
+    return true;
+  }
+  if (text === "/conversation" || text.startsWith("/conversation ")) {
+    const arg = text.slice("/conversation".length).trim();
+    if (arg) {
+      switchConversation(arg);
+      return true;
+    }
+    const existing = await fetchConversations(authToken);
+    const items = Object.entries(existing).map(([name, session]) => ({
+      group: "Conversations",
+      label: name,
+      value: name,
+      meta: name === activeConversation ? "current" : `session ${session}`,
+      provider: "",
+    }));
+    const picked = await openPicker("Switch conversation", items);
+    if (picked) switchConversation(picked.value);
     return true;
   }
   if (text === "/model") {
@@ -186,6 +251,7 @@ async function handleSlashCommand(text: string): Promise<boolean> {
 const COMMANDS: CatalogItem[] = [
   { group: "Commands", label: "/model", value: "/model", meta: "Choose or switch active LLM model", provider: "" },
   { group: "Commands", label: "/provider", value: "/provider", meta: "Choose or switch model provider", provider: "" },
+  { group: "Commands", label: "/conversation", value: "/conversation", meta: "Switch conversation", provider: "" },
   { group: "Commands", label: "/help", value: "/help", meta: "Show available commands", provider: "" },
   { group: "Commands", label: "/clear", value: "/clear", meta: "Clear chat transcript", provider: "" },
 ];
@@ -380,7 +446,7 @@ function renderTurn(thinkingEl: HTMLElement | null): {
 async function sendTurn() {
   const prompt = promptInput.value.trim();
   if (!prompt) return;
-  const conversation = convInput.value.trim() || "main";
+  const conversation = activeConversation;
 
   const userEl = appendBlock("user");
   userEl.textContent = prompt;
@@ -470,7 +536,15 @@ async function main() {
     }
     void sendTurn();
   });
-  convInput.addEventListener("input", saveUIState);
+  // "change", not "input": switching on every keystroke would swap
+  // transcripts mid-word. This fires on blur or Enter, once the name is
+  // actually settled. The input is reset to the active conversation first
+  // so switchConversation saves the outgoing transcript under the right key.
+  convInput.addEventListener("change", () => {
+    const target = convInput.value.trim() || "main";
+    convInput.value = activeConversation;
+    switchConversation(target);
+  });
   promptInput.addEventListener("keydown", (e) => {
     if (!palette.hidden && paletteItems.length > 0) {
       if (e.key === "ArrowDown") {

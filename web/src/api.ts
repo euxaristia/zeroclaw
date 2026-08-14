@@ -73,6 +73,13 @@ export async function fetchStatus(token: string): Promise<StatusResponse> {
   return resp.json();
 }
 
+// Maps conversation name to the zero session id backing it.
+export async function fetchConversations(token: string): Promise<Record<string, string>> {
+  const resp = await fetch("/conversations", { headers: authHeaders(token) });
+  if (!resp.ok) throw new Error(`conversations request failed: ${resp.status}`);
+  return resp.json();
+}
+
 export async function fetchProviders(token: string): Promise<CatalogItem[]> {
   const resp = await fetch("/providers", { headers: authHeaders(token) });
   if (!resp.ok) throw new Error(`providers request failed: ${resp.status}`);
