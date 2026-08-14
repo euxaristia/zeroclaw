@@ -38,8 +38,7 @@ ENV PATH=/usr/local/go/bin:/usr/local/cargo/bin:$PATH
 
 COPY bin/ /tmp/bin/
 RUN cp /tmp/bin/zero /usr/local/bin/zero \
- && (cp /tmp/bin/cairn-code /usr/local/bin/cairn-code 2>/dev/null || true) \
- && chmod 0755 /usr/local/bin/* \
+ && chmod 0755 /usr/local/bin/zero \
  && rm -rf /tmp/bin
 
 COPY bootstrap/ /opt/zeroclaw/bootstrap/

@@ -540,14 +540,7 @@ func Doctor(w io.Writer) error {
 	if err == nil {
 		zeroBin := filepath.Join(dir, "bin", "zero")
 		check("env/bin/zero (linux build)", isLinuxAMD64(zeroBin), "cross-compile zero for linux/amd64")
-		cairnBin := filepath.Join(dir, "bin", "cairn-code")
-		if fileExists(cairnBin) {
-			if isLinuxAMD64(cairnBin) {
-				check("env/bin/cairn-code (linux build)", true, "")
-			} else {
-				check("env/bin/cairn-code (artifact present, not linux/amd64)", false, "cross-compile cairn-code for linux/amd64")
-			}
-		}
+
 	}
 	fmt.Fprintln(w, "note: running without hard isolation is not supported yet; docker is required (tier 3 fallback is an M4 item)")
 	return nil

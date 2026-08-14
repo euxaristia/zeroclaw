@@ -23,7 +23,7 @@ type RaceResult struct {
 // RunRace executes a prompt concurrently against multiple backends and outputs a comparison benchmark.
 func RunRace(w io.Writer, prompt string, backends []string) error {
 	if len(backends) == 0 {
-		backends = []string{"zero", "cairn-code"}
+		backends = []string{"zero", "zero"}
 	}
 
 	fmt.Fprintf(w, "%s %s %s\n\n", badge(" zeroclaw race "), boldInk("Multi-Driver Benchmark"), faint("prompt: "+prompt))

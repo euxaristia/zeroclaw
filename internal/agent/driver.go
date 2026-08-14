@@ -69,15 +69,13 @@ type Driver interface {
 }
 
 // NewDriver constructs the execution driver for the requested backend.
-// Supported backends: "zero" (default when empty), "cairn", or "cairn-code".
+// Supported backends: "zero" (default when empty).
 func NewDriver(backend string) (Driver, error) {
 	switch backend {
 	case "", "zero":
 		return ZeroDriver{}, nil
-	case "cairn", "cairn-code":
-		return CairnDriver{}, nil
 	default:
-		return nil, fmt.Errorf("unknown execution backend: %q (supported: zero, cairn, cairn-code)", backend)
+		return nil, fmt.Errorf("unknown execution backend: %q (supported: zero)", backend)
 	}
 }
 
@@ -90,7 +88,6 @@ type HealthResult struct {
 func Doctor(container string) []HealthResult {
 	return []HealthResult{
 		ZeroDriver{}.Doctor(container),
-		CairnDriver{}.Doctor(container),
 	}
 }
 

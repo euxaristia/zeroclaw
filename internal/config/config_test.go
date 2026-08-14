@@ -151,12 +151,12 @@ func TestLoadBackendEnv(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Setenv("ZEROCLAW_BACKEND", "cairn-code")
+	t.Setenv("ZEROCLAW_BACKEND", "custom-backend")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.Backend != "cairn-code" {
-		t.Errorf("Backend = %q, want cairn-code (env override)", cfg.Backend)
+	if cfg.Backend != "custom-backend" {
+		t.Errorf("Backend = %q, want custom-backend (env override)", cfg.Backend)
 	}
 }
