@@ -86,6 +86,14 @@ Bun installed. Only rebuild it when changing `web/` itself:
 cd web && bun install && bun run build   # regenerates internal/daemon/webdist
 ```
 
+For UI iteration, set `ZEROCLAW_WEB_DIR` before starting the daemon and it
+serves straight off disk instead of the embedded build, so `bun run build` +
+a browser refresh is enough, no daemon restart:
+
+```
+ZEROCLAW_WEB_DIR="$(pwd)/internal/daemon/webdist" ./zeroclaw.exe up
+```
+
 ## Development 🛠️
 
 Run these four checks before every commit. CI gates on them (see

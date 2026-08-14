@@ -5,6 +5,18 @@ let authToken = "";
 let currentProvider: string | undefined;
 let currentModel: string | undefined;
 
+// Mirrors internal/tui/model.go's inputHistory/historyIdx/historyDraft: Up
+// walks back through previously sent prompts, Down walks forward, and the
+// in-progress draft is preserved so arrowing back down past the newest
+// entry restores what you were typing rather than an empty box. Slash
+// commands are never recorded, matching handleSubmit's early return before
+// the history append.
+const inputHistory: string[] = [];
+let historyIdx = 0;
+let historyDraft = "";
+
+const welcomeText = "zeroclaw web. Type /help for commands.";
+
 const transcript = document.getElementById("transcript") as HTMLDivElement;
 const statusAgent = document.getElementById("status-agent") as HTMLSpanElement;
 const convInput = document.getElementById("conv-input") as HTMLInputElement;
@@ -51,6 +63,7 @@ async function handleSlashCommand(text: string): Promise<boolean> {
   }
   if (text === "/clear") {
     transcript.replaceChildren();
+    appendBlock("welcome").textContent = welcomeText;
     return true;
   }
   if (text === "/model") {
@@ -150,6 +163,23 @@ function closePalette() {
   palette.hidden = true;
 }
 
+function historyBack() {
+  if (inputHistory.length === 0) return;
+  if (historyIdx === inputHistory.length) historyDraft = promptInput.value;
+  if (historyIdx > 0) {
+    historyIdx--;
+    promptInput.value = inputHistory[historyIdx]!;
+    autoGrow();
+  }
+}
+
+function historyForward() {
+  if (historyIdx >= inputHistory.length) return;
+  historyIdx++;
+  promptInput.value = historyIdx === inputHistory.length ? historyDraft : inputHistory[historyIdx]!;
+  autoGrow();
+}
+
 async function selectPaletteItem(i: number) {
   const item = paletteItems[i];
   closePalette();
@@ -220,6 +250,12 @@ async function sendTurn() {
   autoGrow();
   closePalette();
 
+  if (!prompt.startsWith("/")) {
+    inputHistory.push(prompt);
+    historyIdx = inputHistory.length;
+    historyDraft = "";
+  }
+
   if (await handleSlashCommand(prompt)) return;
   sendBtn.disabled = true;
 
@@ -262,6 +298,7 @@ async function main() {
     fail(err instanceof Error ? err.message : String(err));
     return;
   }
+  appendBlock("welcome").textContent = welcomeText;
 
   composer.addEventListener("submit", (e) => {
     e.preventDefault();
@@ -293,6 +330,20 @@ async function main() {
         closePalette();
         return;
       }
+    }
+    if (e.key === "ArrowUp" && promptInput.selectionStart === 0 && promptInput.selectionEnd === 0) {
+      e.preventDefault();
+      historyBack();
+      return;
+    }
+    if (
+      e.key === "ArrowDown" &&
+      promptInput.selectionStart === promptInput.value.length &&
+      promptInput.selectionEnd === promptInput.value.length
+    ) {
+      e.preventDefault();
+      historyForward();
+      return;
     }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
