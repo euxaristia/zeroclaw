@@ -23,7 +23,7 @@ type RaceResult struct {
 // RunRace executes a prompt concurrently against multiple backends and outputs a comparison benchmark.
 func RunRace(w io.Writer, prompt string, backends []string) error {
 	if len(backends) == 0 {
-		backends = []string{"zero", "cairn-code"}
+		backends = []string{"zero", "zero"}
 	}
 
 	fmt.Fprintf(w, "%s %s %s\n\n", badge(" zeroclaw race "), boldInk("Multi-Driver Benchmark"), faint("prompt: "+prompt))
@@ -34,13 +34,28 @@ func RunRace(w io.Writer, prompt string, backends []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
+	hasDuplicates := false
+	seen := make(map[string]bool, len(backends))
+	for _, b := range backends {
+		if seen[b] {
+			hasDuplicates = true
+			break
+		}
+		seen[b] = true
+	}
+
 	for i, backend := range backends {
 		wg.Add(1)
 		go func(idx int, b string) {
 			defer wg.Done()
+			label := b
+			if hasDuplicates {
+				label = fmt.Sprintf("%s #%d", b, idx+1)
+			}
+
 			driver, err := agent.NewDriver(b)
 			if err != nil {
-				results[idx] = RaceResult{Backend: b, Error: err}
+				results[idx] = RaceResult{Backend: label, Error: err}
 				return
 			}
 
@@ -58,7 +73,7 @@ func RunRace(w io.Writer, prompt string, backends []string) error {
 
 			duration := time.Since(start)
 			results[idx] = RaceResult{
-				Backend:    b,
+				Backend:    label,
 				Duration:   duration,
 				Result:     res,
 				EventCount: eventCount,

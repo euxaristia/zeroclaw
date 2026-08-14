@@ -6,16 +6,13 @@ import (
 
 func TestNewDriver(t *testing.T) {
 	tests := []struct {
-		backend   string
-		wantZero  bool
-		wantCairn bool
-		wantErr   bool
+		backend  string
+		wantZero bool
+		wantErr  bool
 	}{
-		{"", true, false, false},
-		{"zero", true, false, false},
-		{"cairn", false, true, false},
-		{"cairn-code", false, true, false},
-		{"invalid", false, false, true},
+		{"", true, false},
+		{"zero", true, false},
+		{"invalid", false, true},
 	}
 
 	for _, tc := range tests {
@@ -35,30 +32,22 @@ func TestNewDriver(t *testing.T) {
 				t.Errorf("NewDriver(%q) = %T, want ZeroDriver", tc.backend, d)
 			}
 		}
-		if tc.wantCairn {
-			if _, ok := d.(CairnDriver); !ok {
-				t.Errorf("NewDriver(%q) = %T, want CairnDriver", tc.backend, d)
-			}
-		}
 	}
 }
 
 func TestDoctor(t *testing.T) {
 	results := Doctor("nonexistent-container")
-	if len(results) != 2 {
-		t.Fatalf("Doctor() returned %d results, want 2", len(results))
+	if len(results) != 1 {
+		t.Fatalf("Doctor() returned %d results, want 1", len(results))
+	}
+	if results[0].Name != "zero inside container" {
+		t.Errorf("Doctor() Name = %q, want %q", results[0].Name, "zero inside container")
 	}
 	if results[0].OK {
 		t.Errorf("ZeroDriver.Doctor() returned OK=true for non-existent container")
 	}
-	if results[1].OK {
-		t.Errorf("CairnDriver.Doctor() returned OK=true for non-existent container")
-	}
 	if results[0].Hint == "" {
 		t.Errorf("ZeroDriver.Doctor() returned empty hint on failure")
-	}
-	if results[1].Hint == "" {
-		t.Errorf("CairnDriver.Doctor() returned empty hint on failure")
 	}
 }
 
@@ -66,41 +55,25 @@ func TestDriverModelForwarding(t *testing.T) {
 	tests := []struct {
 		name      string
 		opts      TurnOptions
-		buildArgs func(TurnOptions) []string
 		wantModel string
 		wantHas   bool
 	}{
 		{
-			name:      "zero driver model set",
+			name:      "model set",
 			opts:      TurnOptions{Model: "gpt-4o"},
-			buildArgs: buildZeroArgs,
 			wantModel: "gpt-4o",
 			wantHas:   true,
 		},
 		{
-			name:      "zero driver model unset",
-			opts:      TurnOptions{Model: ""},
-			buildArgs: buildZeroArgs,
-			wantHas:   false,
-		},
-		{
-			name:      "cairn driver model set",
-			opts:      TurnOptions{Model: "claude-3-5-sonnet"},
-			buildArgs: buildCairnArgs,
-			wantModel: "claude-3-5-sonnet",
-			wantHas:   true,
-		},
-		{
-			name:      "cairn driver model unset",
-			opts:      TurnOptions{Model: ""},
-			buildArgs: buildCairnArgs,
-			wantHas:   false,
+			name:    "model unset",
+			opts:    TurnOptions{Model: ""},
+			wantHas: false,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			args := tc.buildArgs(tc.opts)
+			args := buildZeroArgs(tc.opts)
 			hasModel := false
 			var modelVal string
 			for i, arg := range args {
