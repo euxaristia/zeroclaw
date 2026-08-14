@@ -113,6 +113,45 @@ func TestHandleConversations(t *testing.T) {
 	}
 }
 
+func TestHandleProviders(t *testing.T) {
+	s := newTestServer()
+	rec := httptest.NewRecorder()
+	s.handleProviders(rec, httptest.NewRequest(http.MethodGet, "/providers", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want 200", rec.Code)
+	}
+	var items []map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &items); err != nil {
+		t.Fatalf("body not json: %v", err)
+	}
+	if len(items) == 0 {
+		t.Error("expected at least one provider")
+	}
+}
+
+func TestHandleModelsFallsBackToStatic(t *testing.T) {
+	s := newTestServer()
+	rec := httptest.NewRecorder()
+	s.handleModels(rec, httptest.NewRequest(http.MethodGet, "/models?provider=openai", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want 200", rec.Code)
+	}
+	var items []map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &items); err != nil {
+		t.Fatalf("body not json: %v", err)
+	}
+	if len(items) == 0 {
+		t.Error("expected at least one openai model from the static catalog")
+	}
+	for _, item := range items {
+		if item["provider"] != "openai" {
+			t.Errorf("got model for provider %v, want openai", item["provider"])
+		}
+	}
+}
+
 func mustSessionStore(t *testing.T) *agent.SessionStore {
 	t.Helper()
 	store, err := agent.OpenSessionStore(t.TempDir() + "/c.json")

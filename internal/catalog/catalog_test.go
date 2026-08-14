@@ -1,4 +1,4 @@
-package tui
+package catalog
 
 import (
 	"strings"
@@ -57,5 +57,26 @@ func TestFormatContextWindow(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("formatContextWindow(%d) = %q, want %q", tt.ctx, got, tt.want)
 		}
+	}
+}
+
+func TestStaticModelsFiltersByProvider(t *testing.T) {
+	items := StaticModels("openai")
+	if len(items) == 0 {
+		t.Fatal("expected at least one openai model")
+	}
+	for _, item := range items {
+		if item.Provider != "openai" {
+			t.Errorf("StaticModels(%q) returned item for provider %q", "openai", item.Provider)
+		}
+	}
+}
+
+func TestLiveFetchSupported(t *testing.T) {
+	if !LiveFetchSupported("openrouter") || !LiveFetchSupported("gitlawb-opengateway") {
+		t.Error("expected openrouter and gitlawb-opengateway to support live fetch")
+	}
+	if LiveFetchSupported("openai") {
+		t.Error("did not expect openai to support live fetch")
 	}
 }

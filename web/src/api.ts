@@ -36,6 +36,15 @@ export interface StatusResponse {
   conversations: number;
 }
 
+// Mirrors internal/catalog.Item.
+export interface CatalogItem {
+  group: string;
+  label: string;
+  value: string;
+  meta: string;
+  provider: string;
+}
+
 const TOKEN_KEY = "zeroclaw_token";
 
 // readToken pulls the bearer token out of ?token= on first load (the way
@@ -61,6 +70,19 @@ function authHeaders(token: string): HeadersInit {
 export async function fetchStatus(token: string): Promise<StatusResponse> {
   const resp = await fetch("/status", { headers: authHeaders(token) });
   if (!resp.ok) throw new Error(`status request failed: ${resp.status}`);
+  return resp.json();
+}
+
+export async function fetchProviders(token: string): Promise<CatalogItem[]> {
+  const resp = await fetch("/providers", { headers: authHeaders(token) });
+  if (!resp.ok) throw new Error(`providers request failed: ${resp.status}`);
+  return resp.json();
+}
+
+export async function fetchModels(token: string, provider: string): Promise<CatalogItem[]> {
+  const url = provider ? `/models?provider=${encodeURIComponent(provider)}` : "/models";
+  const resp = await fetch(url, { headers: authHeaders(token) });
+  if (!resp.ok) throw new Error(`models request failed: ${resp.status}`);
   return resp.json();
 }
 

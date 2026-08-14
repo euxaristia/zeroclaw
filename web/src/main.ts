@@ -1,4 +1,5 @@
-import { readToken, fetchStatus, streamTurn, type AgentEvent } from "./api";
+import { readToken, fetchStatus, fetchProviders, fetchModels, streamTurn, type AgentEvent } from "./api";
+import { openPicker } from "./picker";
 
 let currentProvider: string | undefined;
 let currentModel: string | undefined;
@@ -28,20 +29,20 @@ function systemMessage(text: string) {
   el.textContent = text;
 }
 
-// handleSlashCommand mirrors internal/tui/model.go's executeSlashCommandWithPrev
-// for the commands that are cheap to port without a picker UI: /help, /clear,
-// and the argument forms of /model and /provider (set local state included on
-// the next turn). Bare /model or /provider, which open an interactive catalog
-// picker in the TUI, say so instead of silently doing nothing. Unrecognized
-// slash text is swallowed rather than sent to the model, matching the TUI's
-// own silent fallthrough for unknown commands. Returns true if the input was
-// handled locally and should not be sent as a prompt.
-function handleSlashCommand(text: string): boolean {
+// handleSlashCommand mirrors internal/tui/model.go's executeSlashCommandWithPrev:
+// /help and /clear act locally, the argument forms of /model and /provider set
+// local state threaded into the next turn, and bare /model or /provider open
+// the same catalog picker the TUI does (backed by GET /models and
+// GET /providers). Unrecognized slash text is swallowed rather than sent to
+// the model, matching the TUI's own silent fallthrough for unknown commands.
+// Returns true if the input was handled locally and should not be sent as a
+// prompt.
+async function handleSlashCommand(token: string, text: string): Promise<boolean> {
   if (text === "/help" || text === "/?" || text === "/h") {
     systemMessage(
       "zeroclaw web commands:\n" +
-        "  /model <name>      Switch active LLM model\n" +
-        "  /provider <name>   Switch model provider\n" +
+        "  /model [name]      Choose or switch active LLM model\n" +
+        "  /provider [name]   Choose or switch model provider\n" +
         "  /help              Show available commands\n" +
         "  /clear             Clear chat transcript",
     );
@@ -51,10 +52,22 @@ function handleSlashCommand(text: string): boolean {
     transcript.replaceChildren();
     return true;
   }
-  if (text === "/model" || text === "/provider") {
-    systemMessage(
-      `${text} needs a name in the web UI (e.g. "${text} gpt-5") — the interactive picker isn't ported yet.`,
-    );
+  if (text === "/model") {
+    const items = await fetchModels(token, currentProvider ?? "gitlawb-opengateway");
+    const picked = await openPicker("Choose a model", items);
+    if (picked) {
+      currentModel = picked.value;
+      systemMessage(`Switched model to ${currentModel}`);
+    }
+    return true;
+  }
+  if (text === "/provider") {
+    const items = await fetchProviders(token);
+    const picked = await openPicker("Choose a provider", items);
+    if (picked) {
+      currentProvider = picked.value;
+      systemMessage(`Switched provider to ${currentProvider}`);
+    }
     return true;
   }
   if (text.startsWith("/model ")) {
@@ -130,8 +143,9 @@ async function sendTurn(token: string) {
   const userEl = appendBlock("user");
   userEl.textContent = prompt;
   promptInput.value = "";
+  autoGrow();
 
-  if (handleSlashCommand(prompt)) return;
+  if (await handleSlashCommand(token, prompt)) return;
   sendBtn.disabled = true;
 
   try {
@@ -183,6 +197,15 @@ async function main() {
       composer.requestSubmit();
     }
   });
+  // resize: none in CSS; grow with content instead of the native drag handle
+  // (which rendered as a near-invisible nub in the wrong corner of the row).
+  promptInput.addEventListener("input", autoGrow);
+  autoGrow();
+}
+
+function autoGrow() {
+  promptInput.style.height = "auto";
+  promptInput.style.height = `${promptInput.scrollHeight}px`;
 }
 
 void main();
