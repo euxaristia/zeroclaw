@@ -109,6 +109,10 @@ html, body {
   color: var(--faint);
 }
 
+.block.welcome {
+  color: var(--faint);
+}
+
 .block.session {
   color: var(--faint);
   font-size: 0.85rem;
@@ -127,7 +131,7 @@ html, body {
 #composer {
   position: relative;
   display: flex;
-  align-items: flex-end;
+  align-items: stretch;
   gap: 0.5rem;
   padding: 0.75rem 1rem;
   border-top: 1px solid var(--border);
