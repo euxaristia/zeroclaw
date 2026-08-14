@@ -6,7 +6,7 @@ import (
 )
 
 // ANSI painting for chat and exec output. The hex values are zero's dark-theme
-// palette (internal/tui/theme_palettes.go in the zero repo) projected onto
+// palette (theme_palettes.go in the zero repo) projected onto
 // truecolor escapes, so a zeroclaw transcript reads like a zero one without
 // pulling in a TUI stack. Terminals downsample truecolor themselves; NO_COLOR
 // disables everything.

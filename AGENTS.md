@@ -24,7 +24,7 @@ do not decide it now.
 - The agent itself lives inside its own **completely isolated working environment**
   (its own home directory, its own packages, its own filesystem). It never touches
   the host filesystem.
-- You talk to it over channels (CLI chat and Telegram).
+- You talk to it over channels (browser web UI and Telegram).
 - It wakes itself up on schedules and heartbeats, works unattended, and keeps
   durable memory and skills across sessions, hermes-style.
 - Every model turn and tool execution is delegated to `zero exec` running inside
@@ -129,8 +129,8 @@ host                                    container (zeroclaw-env)
         ^  localhost HTTP + bearer token
         |
 +---------------------------+
-| zeroclaw CLI (thin client)|   chat / exec / status / give / take ...
-+---------------------------+   CLI chat is just another gateway client
+| zeroclaw CLI (thin client)|   web / exec / status / give / take ...
++---------------------------+   the browser UI is another gateway client
 ```
 
 - **Daemon** (`zeroclawd`, started by `zeroclaw up` or `zeroclaw daemon start`):
@@ -140,10 +140,11 @@ host                                    container (zeroclaw-env)
   file). Single process, hermes-gateway-style. Autostart at login (Task
   Scheduler / launchd) is a hardening item.
 - **CLI as thin client**: every `zeroclaw` command except `up`, `doctor`, and the
-  env file-copy commands is an RPC client. `zeroclaw chat` is one more channel
-  attached to the gateway, a peer of Telegram, with no privileged path into
-  agent internals. If the daemon is not running, clients say so and suggest
-  `zeroclaw up`; nothing falls back to in-process execution.
+  env file-copy commands is an RPC client, with no privileged path into agent
+  internals. If the daemon is not running, clients say so and suggest
+  `zeroclaw up`; nothing falls back to in-process execution. The terminal
+  chat UI was removed once the web UI reached parity; `zeroclaw web` is the
+  interactive surface and `zeroclaw exec` the one-shot one.
 - **Web UI as thin client too**: same rule applies to `web/`. It talks to
   `zeroclawd` over the same `/status`, `/conversations`, `/turn` RPC plane as
   the CLI and Telegram, just from the browser instead of a terminal. It is a
@@ -172,7 +173,7 @@ host                                    container (zeroclaw-env)
   (ZEROCLAW.md identity + operating rules, MEMORY.md index, HEARTBEAT.md). The
   identity prompt instructs the agent to persist facts and to write zero skills
   after complex tasks, hermes-style. No code needed beyond seeding and prompts.
-- **CLI surface**: `zeroclaw [-a <name>] up | down | status | chat | exec "<prompt>" | list | reset-container | reset-env --force | give | take | beat | web | doctor | auth [sync|login] | daemon start|run|stop`.
+- **CLI surface**: `zeroclaw [-a <name>] up | down | status | exec "<prompt>" | list | reset-container | reset-env --force | give | take | beat | web | doctor | auth [sync|login] | daemon start|run|stop`.
 
 ## Stack
 
@@ -182,7 +183,8 @@ host                                    container (zeroclaw-env)
   imports zero's code; it stays an untouched sibling project consumed as a
   binary inside the container image (cross-compiled for linux/amd64 into
   `env/bin/zero`, which is untracked).
-- Dependencies: stdlib only on the Go side. Telegram long polling is plain
+- Dependencies: stdlib only on the Go side, and literally so: go.mod has
+  no require block and there is no go.sum. Telegram long polling is plain
   net/http against the Bot API, so no bot library is needed. Any exception
   requires explicit approval before adding it.
 - Approved exception: the web UI frontend (`web/`) is TypeScript built with
@@ -203,8 +205,8 @@ zeroclaw/
   go.mod
   cmd/zeroclaw/main.go   entrypoint; dispatches CLI commands and `daemon run`
   internal/
-    cli/                 thin client: command dispatch, chat REPL, event
-                         rendering (style.go), RPC calls to zeroclawd
+    cli/                 thin client: command dispatch, event rendering
+                         (style.go), RPC calls to zeroclawd
     daemon/              zeroclawd: supervisor, scheduler, RPC server, launch
     env/                 container lifecycle: docker.go, seeding, doctor checks
     agent/               driver.go (harness interface, zero-agnostic),
@@ -213,8 +215,8 @@ zeroclaw/
     channels/            telegram.go (net/http long polling)
     config/              host config (~/.zeroclaw/config.json) + secrets
   web/                    TypeScript web UI (Bun, not npm), built and served
-                         as a static bundle by zeroclawd; ports the CLI chat
-                         REPL to a browser, talks to the same RPC plane.
+                         as a static bundle by zeroclawd; the interactive
+                         surface, talking to the same RPC plane.
                          `bun run build` regenerates internal/daemon/webdist
                          (committed, embedded via go:embed); `bun test` and
                          `bun run typecheck` are its checks. Set

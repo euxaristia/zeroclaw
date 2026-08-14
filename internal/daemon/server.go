@@ -336,7 +336,7 @@ func (s *server) handleProviders(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(catalog.Providers())
 }
 
-// handleModels mirrors internal/tui's model picker: try the provider's live
+// handleModels backs the web UI's model picker: try the provider's live
 // catalog when it has one, and fall back to the curated static list on any
 // failure (unsupported provider, network error, bad response) rather than
 // erroring the request.

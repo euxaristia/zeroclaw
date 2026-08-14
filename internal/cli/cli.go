@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -12,7 +11,6 @@ import (
 	"zeroclaw/internal/config"
 	"zeroclaw/internal/daemon"
 	"zeroclaw/internal/env"
-	"zeroclaw/internal/tui"
 )
 
 // version is the released zeroclaw version. Bump on each release.
@@ -24,7 +22,6 @@ const usage = `usage: zeroclaw [-a <agent>] <command>
   up                    start environment + zeroclawd
   down                  stop zeroclawd + environment
   status                daemon and environment state
-  chat [conversation]   interactive chat (default conversation: main)
   web                   open the web UI in a browser
   exec "<prompt>"       one turn in the main conversation
   race "<prompt>"       benchmark a prompt across multiple zero sessions
@@ -204,11 +201,7 @@ func Run(args []string) error {
 		}
 		return execTurn("main", prompt, agentName)
 	case "chat":
-		conversation := "main"
-		if len(args) > 1 {
-			conversation = args[1]
-		}
-		return chat(conversation, agentName)
+		return errors.New("the terminal chat UI has been removed; run `zeroclaw web` for the browser UI, or `zeroclaw exec \"<prompt>\"` for one turn")
 	case "web":
 		if err := noExtraArgs(args); err != nil {
 			return err
@@ -374,26 +367,6 @@ func execTurn(conversation, prompt string, agentName ...string) error {
 		mark = red("✗ " + trailer.Status + " " + trailer.Error)
 	}
 	fmt.Fprintf(os.Stderr, "%s %s\n", mark, faint("session "+trailer.SessionID))
-	return nil
-}
-
-func chat(conversation string, agentName ...string) error {
-	agent := "default"
-	if len(agentName) > 0 && agentName[0] != "" {
-		agent = agentName[0]
-	}
-	info, ok := daemon.Running(agent)
-	if !ok {
-		return fmt.Errorf("zeroclawd is not running for agent %s; run `zeroclaw up`", agent)
-	}
-	code := tui.Run(context.Background(), tui.Options{
-		Conversation: conversation,
-		Port:         info.Port,
-		Token:        info.Token,
-	})
-	if code != 0 {
-		return fmt.Errorf("chat exited with code %d", code)
-	}
 	return nil
 }
 

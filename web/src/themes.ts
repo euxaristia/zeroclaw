@@ -1,6 +1,7 @@
-// Generated from internal/tui/theme_palettes.go. The web UI and the TUI
-// must not drift on colour, so these values are transcribed verbatim
-// rather than re-picked by eye. Regenerate if the Go palettes change.
+// Palettes transcribed verbatim from zero's internal/tui/theme_palettes.go
+// so the web UI reads the same as zero's TUI. This is now the only copy:
+// zeroclaw's own terminal chat UI was removed, so there is no Go-side
+// palette left in this repo to check against.
 
 export interface Palette {
   panel: string;

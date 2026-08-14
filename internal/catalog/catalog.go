@@ -1,7 +1,6 @@
 // Package catalog holds the curated model/provider lists and the live model
-// fetch used by the /model and /provider pickers. It exists so the TUI
-// (internal/tui/picker.go) and the web UI's /providers and /models RPC
-// routes (internal/daemon) share one copy of this data instead of drifting.
+// fetch behind the web UI's /model and /provider pickers, served by the
+// /providers and /models routes in internal/daemon.
 package catalog
 
 import (

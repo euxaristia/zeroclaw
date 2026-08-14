@@ -70,7 +70,7 @@ GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o ../zeroclaw/env/bin/zero-linux
 # from this repo
 go build -o zeroclaw.exe ./cmd/zeroclaw   # zeroclaw on unix
 ./zeroclaw.exe up
-./zeroclaw.exe chat
+./zeroclaw.exe web
 ```
 
 `up` builds the image on first run, starts the container and the daemon, and
@@ -109,9 +109,13 @@ The bearer token is still regenerated on each start, so re-run
 The frontend has its own checks, run from `web/`:
 
 ```
-bun test         # markdown renderer
+bun test         # markdown renderer, context gauge
 bun run typecheck
 ```
+
+The Go module is stdlib-only: `go.mod` has no `require` block, and there is
+no `go.sum`. The browser is the only interactive surface, so nothing pulls
+in a terminal UI toolkit.
 
 ## Web UI 🌐
 
@@ -123,13 +127,15 @@ client of the CLI and Telegram, with no privileged path into the agent.
 
 - **Chat** with streaming replies rendered as markdown (fenced code,
   headings, lists, links). Reasoning, tool calls, and tool results are shown
-  distinctly, mirroring the CLI's renderer.
+  distinctly.
 - **Stop** cancels a running turn. This is a real cancellation: the daemon
   hands its request context to the driver, so dropping the connection kills
   the in-container process.
 - **Slash commands**, with a palette that opens on `/` and narrows as you
-  type: `/model`, `/provider`, `/conversation` (each opens a filterable
-  picker), plus `/help` and `/clear`.
+  type: `/model`, `/provider`, `/conversation`, `/theme`, and `/effort` open
+  filterable pickers; `/new`, `/retry`, `/copy`, `/export`, `/beat`,
+  `/turns`, `/status`, `/help`, and `/clear` act directly.
+- **Esc cancels** a running turn, with a confirmation press, as in zero.
 - **Input history** with Up/Down and a position indicator.
 - **Per-conversation transcripts**, restored on refresh. Each conversation
   is a separate zero session, so each keeps its own visible history.
@@ -179,7 +185,6 @@ zeroclaw [-a <agent>] list      list all available zeroclaw agent profiles and s
 zeroclaw [-a <agent>] up        start environment + zeroclawd
 zeroclaw [-a <agent>] down      stop zeroclawd + environment
 zeroclaw [-a <agent>] status    daemon and environment state
-zeroclaw [-a <agent>] chat      interactive chat (default conversation: main)
 zeroclaw [-a <agent>] web       open the web UI in a browser
 zeroclaw [-a <agent>] exec "<p>" one turn in the main conversation
 zeroclaw race "<prompt>"        benchmark a prompt across multiple zero sessions
