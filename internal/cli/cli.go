@@ -43,6 +43,15 @@ const usage = `usage: zeroclaw [-a <agent>] <command>
 Options:
   -a, --agent <name>    select agent profile (default: default, env: ZEROCLAW_AGENT)`
 
+// noExtraArgs rejects trailing arguments for subcommands that take none.
+// args[0] is the subcommand name itself; anything after it is unexpected.
+func noExtraArgs(args []string) error {
+	if len(args) > 1 {
+		return fmt.Errorf("zeroclaw %s takes no arguments (got %q)\n%s", args[0], args[1], usage)
+	}
+	return nil
+}
+
 func parseAgentAndArgs(args []string) (string, []string, error) {
 	agentName := os.Getenv("ZEROCLAW_AGENT")
 	if agentName == "" {
@@ -130,18 +139,30 @@ func Run(args []string) error {
 		fmt.Println("zeroclaw", version)
 		return nil
 	case "list":
+		if err := noExtraArgs(args); err != nil {
+			return err
+		}
 		return listAgents(os.Stdout)
 	case "up":
+		if err := noExtraArgs(args); err != nil {
+			return err
+		}
 		if err := env.Up(agentName); err != nil {
 			return err
 		}
 		return daemon.Launch(agentName)
 	case "down":
+		if err := noExtraArgs(args); err != nil {
+			return err
+		}
 		if err := daemon.Stop(agentName); err != nil {
 			fmt.Fprintln(os.Stderr, "warning:", err)
 		}
 		return env.Down(agentName)
 	case "status":
+		if err := noExtraArgs(args); err != nil {
+			return err
+		}
 		if info, ok := daemon.Running(agentName); ok {
 			fmt.Printf("daemon:    running (pid %d, port %d)\n", info.PID, info.Port)
 		} else {
@@ -149,6 +170,9 @@ func Run(args []string) error {
 		}
 		return env.Status(os.Stdout, agentName)
 	case "doctor":
+		if err := noExtraArgs(args); err != nil {
+			return err
+		}
 		if err := env.Doctor(os.Stdout, agentName); err != nil {
 			return err
 		}
@@ -160,6 +184,9 @@ func Run(args []string) error {
 		fmt.Printf("FAIL zeroclawd (%s) responding (zeroclaw up)\n", agentName)
 		return nil
 	case "audit":
+		if err := noExtraArgs(args); err != nil {
+			return err
+		}
 		return env.Audit(os.Stdout)
 	case "race":
 		prompt := strings.TrimSpace(strings.Join(args[1:], " "))
@@ -183,8 +210,14 @@ func Run(args []string) error {
 		}
 		return chat(conversation, agentName)
 	case "web":
+		if err := noExtraArgs(args); err != nil {
+			return err
+		}
 		return openWeb(agentName)
 	case "beat":
+		if err := noExtraArgs(args); err != nil {
+			return err
+		}
 		return daemon.Beat(agentName)
 	case "give":
 		if len(args) != 2 {
@@ -201,6 +234,9 @@ func Run(args []string) error {
 		}
 		return env.Take(args[1], dest, agentName)
 	case "reset-container":
+		if err := noExtraArgs(args); err != nil {
+			return err
+		}
 		if err := daemon.Stop(agentName); err != nil {
 			fmt.Fprintln(os.Stderr, "warning:", err)
 		}

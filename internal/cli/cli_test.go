@@ -82,6 +82,24 @@ func TestRunDaemonArgCount(t *testing.T) {
 	}
 }
 
+// TestRunNoExtraArgs covers noExtraArgs's rejection path for every
+// subcommand that takes none. It never reaches daemon/docker code: the
+// check runs before any of that, so an unrecognized trailing argument
+// (e.g. the reported `zeroclaw web --dev`, which isn't a real flag) errors
+// immediately instead of being silently ignored.
+func TestRunNoExtraArgs(t *testing.T) {
+	for _, cmd := range []string{"list", "up", "down", "status", "doctor", "audit", "web", "beat", "reset-container"} {
+		err := Run([]string{cmd, "--dev"})
+		if err == nil {
+			t.Errorf("Run([%s, --dev]) returned nil error, want rejection of the unknown argument", cmd)
+			continue
+		}
+		if want := "takes no arguments"; !contains(err.Error(), want) {
+			t.Errorf("Run([%s, --dev]) error = %q, want to contain %q", cmd, err.Error(), want)
+		}
+	}
+}
+
 func TestParseAgentAndArgs(t *testing.T) {
 	tests := []struct {
 		name      string
