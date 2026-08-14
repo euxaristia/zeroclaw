@@ -35,7 +35,9 @@ do not decide it now.
 
 - Not a new coding agent loop. Zero owns the agentic loop, tools, providers,
   sessions, skills, and permissions. Zeroclaw never reimplements those.
-- Not multi-user, not a hosted service, no web UI.
+- Not multi-user, not a hosted service. A local web UI is in scope (single
+  operator, served off the same loopback control plane as the CLI); a
+  hosted, multi-tenant UI is not.
 - Not voice, not WhatsApp/Signal/Slack. One chat channel max in the prototype.
 - No training/self-improvement pipeline beyond file-based memory and zero skills.
 
@@ -142,6 +144,11 @@ host                                    container (zeroclaw-env)
   attached to the gateway, a peer of Telegram, with no privileged path into
   agent internals. If the daemon is not running, clients say so and suggest
   `zeroclaw up`; nothing falls back to in-process execution.
+- **Web UI as thin client too**: same rule applies to `web/`. It talks to
+  `zeroclawd` over the same `/status`, `/conversations`, `/turn` RPC plane as
+  the CLI and Telegram, just from the browser instead of a terminal. It is a
+  peer channel, not a privileged path, and `zeroclawd` is still the only
+  process that ever holds the bearer token server-side.
 - **Harness driver**: `internal/agent/driver.go` defines the minimal interface
   zeroclaw needs from an execution backend (start or resume a session, send a
   turn, receive an event stream). `zerodriver.go` implements it over `zero exec`
@@ -165,7 +172,7 @@ host                                    container (zeroclaw-env)
   (ZEROCLAW.md identity + operating rules, MEMORY.md index, HEARTBEAT.md). The
   identity prompt instructs the agent to persist facts and to write zero skills
   after complex tasks, hermes-style. No code needed beyond seeding and prompts.
-- **CLI surface**: `zeroclaw [-a <name>] up | down | status | chat | exec "<prompt>" | list | reset-container | reset-env --force | give | take | beat | doctor | auth [sync|login] | daemon start|run|stop`.
+- **CLI surface**: `zeroclaw [-a <name>] up | down | status | chat | exec "<prompt>" | list | reset-container | reset-env --force | give | take | beat | web | doctor | auth [sync|login] | daemon start|run|stop`.
 
 ## Stack
 
@@ -175,11 +182,18 @@ host                                    container (zeroclaw-env)
   imports zero's code; it stays an untouched sibling project consumed as a
   binary inside the container image (cross-compiled for linux/amd64 into
   `env/bin/zero`, which is untracked).
-- Dependencies: stdlib only. Telegram long polling is plain net/http against
-  the Bot API, so no bot library is needed. Any exception requires explicit
-  approval before adding it.
-- Follow zero's Go conventions (internal/ packages, table tests). The TS-specific
-  style rules in the global CLAUDE.md do not apply here.
+- Dependencies: stdlib only on the Go side. Telegram long polling is plain
+  net/http against the Bot API, so no bot library is needed. Any exception
+  requires explicit approval before adding it.
+- Approved exception: the web UI frontend (`web/`) is TypeScript built with
+  Bun, not npm/node. `zeroclawd` serves its static build directly off the
+  same loopback port as the RPC API (Jupyter/code-server pattern: the token
+  goes in the URL at launch, `zeroclaw web` prints and opens
+  `http://127.0.0.1:PORT/?token=...`). No separate frontend server process,
+  no new Go dependency required to serve it.
+- Follow zero's Go conventions (internal/ packages, table tests) for
+  everything under `internal/` and `cmd/`. The TS-specific style rules in the
+  global CLAUDE.md apply to `web/`.
 
 ## Repo layout
 
@@ -198,6 +212,9 @@ zeroclaw/
                          sessions.go (conversation-to-session map)
     channels/            telegram.go (net/http long polling)
     config/              host config (~/.zeroclaw/config.json) + secrets
+  web/                    TypeScript web UI (Bun, not npm), built and served
+                         as a static bundle by zeroclawd; ports the CLI chat
+                         REPL to a browser, talks to the same RPC plane
   env/
     Dockerfile
     LICENSE.zero         MIT notice for the bundled zero binary
@@ -212,7 +229,8 @@ zeroclaw/
 
 The original milestones M0 (walking skeleton), M1 (conversations + daemon/client
 split), M2 (autonomy: heartbeats, schedules, memory), and M3 (Telegram channel)
-are done and shipped. Remaining hardening items, none started:
+are done and shipped. M4 (web UI, porting the CLI chat REPL to `web/`) is
+scoped but not started. Remaining hardening items, none started:
 
 - Tier 3 fallback (run without Docker, clearly labeled as soft isolation).
 - Egress allowlist proxy.
