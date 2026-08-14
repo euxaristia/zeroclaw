@@ -5,24 +5,33 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>zeroclaw</title>
   
-<link rel="stylesheet" crossorigin href="./chunk-adfjhw00.css"><script type="module" crossorigin src="./chunk-7td8f33c.js"></script></head>
+<link rel="stylesheet" crossorigin href="./chunk-wrghhz6a.css"><script type="module" crossorigin src="./chunk-pr0g2707.js"></script></head>
 <body>
   <div id="app">
-    <header id="statusbar">
-      <span id="status-agent">connecting…</span>
-      <label id="conv-label">
-        conversation
-        <input id="conv-input" value="main" autocomplete="off" spellcheck="false" />
-      </label>
+    <!-- Mirrors internal/tui/model.go's titleBar: accent badge, faint
+         conversation, provider/model on the right. -->
+    <header id="titlebar">
+      <span id="badge">zeroclaw</span>
+      <input id="conv-input" value="main" autocomplete="off" spellcheck="false" aria-label="conversation" />
+      <span id="model-indicator"></span>
     </header>
+
     <main id="transcript"></main>
+
     <form id="composer">
+      <span id="prompt-marker">❯</span>
       <div id="prompt-wrap">
-        <textarea id="prompt-input" placeholder="Message zeroclaw…" rows="2" autofocus></textarea>
+        <textarea id="prompt-input" placeholder="Message zeroclaw…" rows="1" autofocus></textarea>
         <span id="history-indicator" hidden></span>
       </div>
       <button id="send-btn" type="submit">Send</button>
     </form>
+
+    <!-- statusLine: accent dot, ready/working, session id on the right. -->
+    <footer id="statusline">
+      <span id="status-left"><span id="status-dot">●</span> <span id="status-text">connecting</span></span>
+      <span id="status-right"></span>
+    </footer>
   </div>
   
 </body>

@@ -10,11 +10,14 @@ import {
 } from "./api";
 import { openPicker } from "./picker";
 import { renderMarkdown } from "./markdown";
+import { applyTheme, defaultTheme } from "./theme";
+import { THEMES } from "./themes";
 
 let authToken = "";
 let currentProvider: string | undefined;
 let currentModel: string | undefined;
 let inFlight: AbortController | null = null;
+let currentTheme = defaultTheme().name;
 
 // Mirrors internal/tui/model.go's inputHistory/historyIdx/historyDraft: Up
 // walks back through previously sent prompts, Down walks forward, and the
@@ -84,7 +87,12 @@ function loadTranscript(): boolean {
 function saveUIState() {
   sessionStorage.setItem(
     STATE_KEY,
-    JSON.stringify({ model: currentModel, provider: currentProvider, conversation: activeConversation }),
+    JSON.stringify({
+      model: currentModel,
+      provider: currentProvider,
+      conversation: activeConversation,
+      theme: currentTheme,
+    }),
   );
 }
 
@@ -92,25 +100,71 @@ function loadUIState() {
   const raw = sessionStorage.getItem(STATE_KEY);
   if (!raw) return;
   try {
-    const state = JSON.parse(raw) as { model?: string; provider?: string; conversation?: string };
+    const state = JSON.parse(raw) as {
+      model?: string;
+      provider?: string;
+      conversation?: string;
+      theme?: string;
+    };
     currentModel = state.model;
     currentProvider = state.provider;
     if (state.conversation) {
       activeConversation = state.conversation;
       convInput.value = state.conversation;
     }
+    if (state.theme) currentTheme = state.theme;
   } catch {
     // ignore malformed state
   }
 }
 
 const transcript = document.getElementById("transcript") as HTMLDivElement;
-const statusAgent = document.getElementById("status-agent") as HTMLSpanElement;
 const convInput = document.getElementById("conv-input") as HTMLInputElement;
 const composer = document.getElementById("composer") as HTMLFormElement;
 const promptInput = document.getElementById("prompt-input") as HTMLTextAreaElement;
 const sendBtn = document.getElementById("send-btn") as HTMLButtonElement;
 const historyIndicator = document.getElementById("history-indicator") as HTMLSpanElement;
+const modelIndicator = document.getElementById("model-indicator") as HTMLSpanElement;
+const statusline = document.getElementById("statusline") as HTMLElement;
+const statusText = document.getElementById("status-text") as HTMLSpanElement;
+const statusRight = document.getElementById("status-right") as HTMLSpanElement;
+
+// titleBar's right-hand side: "provider/model", or just the model when no
+// provider is set. Empty until something actually selects one, rather than
+// guessing a default that may not be what the daemon uses.
+function updateModelIndicator() {
+  if (currentModel && currentProvider) {
+    modelIndicator.textContent = `${currentProvider}/${currentModel}`;
+  } else {
+    modelIndicator.textContent = currentModel ?? currentProvider ?? "";
+  }
+}
+
+// statusLine: green "ready" when idle, muted "working Ns" counting up while
+// a turn runs, with the session id on the right once one exists.
+let workingTimer: number | undefined;
+
+function setStatusReady() {
+  clearInterval(workingTimer);
+  workingTimer = undefined;
+  statusline.classList.remove("working");
+  statusText.textContent = "ready";
+}
+
+function setStatusWorking() {
+  const start = Date.now();
+  statusline.classList.add("working");
+  const tick = () => {
+    statusText.textContent = `working ${Math.floor((Date.now() - start) / 1000)}s`;
+  };
+  tick();
+  clearInterval(workingTimer);
+  workingTimer = setInterval(tick, 1000) as unknown as number;
+}
+
+function setSession(id: string) {
+  statusRight.textContent = id ? `session ${id}` : "";
+}
 
 function appendBlock(className: string): HTMLDivElement {
   const el = document.createElement("div");
@@ -202,11 +256,48 @@ async function handleSlashCommand(text: string): Promise<boolean> {
     if (picked) switchConversation(picked.value);
     return true;
   }
+  if (text === "/theme" || text.startsWith("/theme ")) {
+    const arg = text.slice("/theme".length).trim();
+    if (arg) {
+      const entry = applyTheme(arg);
+      if (!entry) {
+        fail(`Unknown theme: ${arg}`);
+        return true;
+      }
+      currentTheme = entry.name;
+      saveUIState();
+      systemMessage(`Switched theme to ${entry.label}`);
+      return true;
+    }
+    const previous = currentTheme;
+    const items = THEMES.map((t) => ({
+      group: t.isDark ? "Dark Themes" : "Light Themes",
+      label: t.label,
+      value: t.name,
+      meta: t.name === currentTheme ? "current" : t.name,
+      provider: "",
+    }));
+    // Preview as the selection moves, and restore on cancel, matching the
+    // TUI's previewSelectedTheme / Esc behaviour.
+    const picked = await openPicker("Choose a theme", items, (item) => {
+      if (item) applyTheme(item.value);
+    });
+    if (picked) {
+      currentTheme = picked.value;
+      applyTheme(currentTheme);
+      saveUIState();
+      systemMessage(`Switched theme to ${picked.label}`);
+    } else {
+      applyTheme(previous);
+    }
+    return true;
+  }
   if (text === "/model") {
     const items = await fetchModels(authToken, currentProvider ?? "gitlawb-opengateway");
     const picked = await openPicker("Choose a model", items);
     if (picked) {
       currentModel = picked.value;
+      updateModelIndicator();
       saveUIState();
       systemMessage(`Switched model to ${currentModel}`);
     }
@@ -217,6 +308,7 @@ async function handleSlashCommand(text: string): Promise<boolean> {
     const picked = await openPicker("Choose a provider", items);
     if (picked) {
       currentProvider = picked.value;
+      updateModelIndicator();
       saveUIState();
       systemMessage(`Switched provider to ${currentProvider}`);
     }
@@ -224,12 +316,14 @@ async function handleSlashCommand(text: string): Promise<boolean> {
   }
   if (text.startsWith("/model ")) {
     currentModel = text.slice("/model ".length).trim() || currentModel;
+    updateModelIndicator();
     saveUIState();
     systemMessage(`Switched model to ${currentModel}`);
     return true;
   }
   if (text.startsWith("/provider ")) {
     currentProvider = text.slice("/provider ".length).trim() || currentProvider;
+    updateModelIndicator();
     saveUIState();
     systemMessage(`Switched provider to ${currentProvider}`);
     return true;
@@ -252,6 +346,7 @@ const COMMANDS: CatalogItem[] = [
   { group: "Commands", label: "/model", value: "/model", meta: "Choose or switch active LLM model", provider: "" },
   { group: "Commands", label: "/provider", value: "/provider", meta: "Choose or switch model provider", provider: "" },
   { group: "Commands", label: "/conversation", value: "/conversation", meta: "Switch conversation", provider: "" },
+  { group: "Commands", label: "/theme", value: "/theme", meta: "Choose a UI colour theme", provider: "" },
   { group: "Commands", label: "/help", value: "/help", meta: "Show available commands", provider: "" },
   { group: "Commands", label: "/clear", value: "/clear", meta: "Clear chat transcript", provider: "" },
 ];
@@ -390,6 +485,12 @@ function renderTurn(thinkingEl: HTMLElement | null): {
   const onEvent = (ev: AgentEvent) => {
     switch (ev.type) {
       case "run_start":
+        // The daemon reports what it actually used, which is the only way
+        // an "auto" route resolves to a concrete model.
+        if (ev.model) currentModel = ev.model;
+        if (ev.provider) currentProvider = ev.provider;
+        updateModelIndicator();
+        if (ev.sessionId) setSession(ev.sessionId);
         if (thinking) thinking.textContent = `session ${ev.sessionId} · ${ev.provider} ${ev.model}`;
         break;
       case "reasoning":
@@ -472,6 +573,7 @@ async function sendTurn() {
   // which cancels the turn in the container rather than just hiding it.
   inFlight = new AbortController();
   setSendButtonStopping(true);
+  setStatusWorking();
   try {
     const trailer = await streamTurn(
       authToken,
@@ -496,6 +598,7 @@ async function sendTurn() {
   } finally {
     inFlight = null;
     setSendButtonStopping(false);
+    setStatusReady();
     thinkingEl.remove();
     saveTranscript();
     promptInput.focus();
@@ -505,7 +608,7 @@ async function sendTurn() {
 async function main() {
   const token = readToken();
   if (!token) {
-    statusAgent.textContent = "no token";
+    statusText.textContent = "no token";
     fail("No auth token found. Open this page with `zeroclaw web`, not a bare URL.");
     composer.querySelectorAll("input, textarea, button").forEach((el) => {
       (el as HTMLInputElement | HTMLTextAreaElement | HTMLButtonElement).disabled = true;
@@ -514,12 +617,15 @@ async function main() {
   }
   authToken = token;
   loadUIState();
+  applyTheme(currentTheme);
+  updateModelIndicator();
 
   try {
     const status = await fetchStatus(authToken);
-    statusAgent.textContent = `${status.agent} · ${status.container} · pid ${status.pid}`;
+    statusRight.textContent = `${status.agent} · ${status.container} · pid ${status.pid}`;
+    setStatusReady();
   } catch (err) {
-    statusAgent.textContent = "connection failed";
+    statusText.textContent = "connection failed";
     fail(err instanceof Error ? err.message : String(err));
     return;
   }

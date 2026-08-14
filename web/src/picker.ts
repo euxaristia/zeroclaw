@@ -4,7 +4,14 @@ import type { CatalogItem } from "./api";
 // keyboard-navigable overlay list. Filtering matches the TUI's applyQuery —
 // a case-insensitive substring match across label, group, value, meta, and
 // provider.
-export function openPicker(title: string, items: CatalogItem[]): Promise<CatalogItem | null> {
+// onHighlight fires as the selection moves, so a caller can preview the
+// highlighted item the way internal/tui/model.go previews a theme while
+// arrowing through the theme picker.
+export function openPicker(
+  title: string,
+  items: CatalogItem[],
+  onHighlight?: (item: CatalogItem | null) => void,
+): Promise<CatalogItem | null> {
   return new Promise((resolve) => {
     const overlay = document.createElement("div");
     overlay.className = "picker-overlay";
@@ -70,6 +77,7 @@ export function openPicker(title: string, items: CatalogItem[]): Promise<Catalog
           list.querySelector(".picker-row.selected")?.classList.remove("selected");
           row.classList.add("selected");
           selected = i;
+          onHighlight?.(item);
         });
         list.appendChild(row);
       });
@@ -82,6 +90,7 @@ export function openPicker(title: string, items: CatalogItem[]): Promise<Catalog
       hint.textContent = `↑/↓ move · Enter select · Esc close (${filtered.length ? selected + 1 : 0}/${filtered.length})`;
       const selectedEl = list.querySelector(".picker-row.selected");
       selectedEl?.scrollIntoView({ block: "nearest" });
+      onHighlight?.(filtered[selected] ?? null);
     }
 
     function applyFilter() {

@@ -1,13 +1,25 @@
+/* Colours come from the active theme as custom properties set by theme.ts,
+   named to match internal/tui/theme.go's palette so the two can't drift.
+   The :root values here are the "dark" default and only apply for the
+   instant before theme.ts runs. */
 :root {
-  color-scheme: dark;
-  --bg: #0e0e10;
-  --ink: #e6e6e6;
-  --faint: #8a8a8a;
-  --muted: #6b6b6b;
-  --accent: #d62828;
-  --green: #3fb950;
-  --red: #f85149;
-  --border: #2a2a2e;
+  --panel: #0e0e10;
+  --prompt-bg: #262626;
+  --line: #242429;
+  --line2: #414147;
+  --ink: #ececee;
+  --muted: #9a9aa2;
+  --faint: #8a8a92;
+  --faintest: #7c7c82;
+  --accent: #caff3f;
+  --green: #5dd1a4;
+  --red: #ff7a7a;
+  --amber: #ffc25c;
+  --blue: #7db4ff;
+  --on-accent: #000000;
+  --card-run: #5a6b2e;
+  --card-err: #6b3434;
+
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
 
@@ -18,7 +30,7 @@
 html, body {
   height: 100%;
   margin: 0;
-  background: var(--bg);
+  background: var(--panel);
   color: var(--ink);
 }
 
@@ -28,37 +40,92 @@ html, body {
   flex-direction: column;
 }
 
-#statusbar {
+/* titleBar in model.go: badge, faint conversation, provider/model right. */
+#titlebar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 0.6rem;
   padding: 0.5rem 1rem;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--line);
   font-size: 0.85rem;
-  color: var(--faint);
 }
 
-#conv-label {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
+/* badge in theme.go: onAccent on accent, bold, one space of padding. */
+#badge {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 700;
+  padding: 0.05rem 0.5rem;
+  border-radius: 3px;
+  flex: none;
 }
 
+/* Editable, but styled as the faint inline conversation label the TUI
+   shows rather than as a form field. */
 #conv-input {
   background: transparent;
-  border: 1px solid var(--border);
-  color: var(--ink);
-  padding: 0.15rem 0.4rem;
+  border: 1px solid transparent;
+  color: var(--faint);
+  padding: 0.1rem 0.3rem;
   border-radius: 4px;
   font: inherit;
-  width: 10rem;
+  width: 12rem;
+  flex: none;
+}
+
+#conv-input:hover {
+  border-color: var(--line2);
+}
+
+#model-indicator {
+  margin-left: auto;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 #conv-input:focus,
 #prompt-input:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(214, 40, 40, 0.35);
+}
+
+/* statusLine in model.go: accent dot, ready/working, session on the right. */
+#statusline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.35rem 1rem 0.5rem;
+  font-size: 0.8rem;
+}
+
+#status-dot {
+  color: var(--accent);
+}
+
+#status-text {
+  color: var(--green);
+}
+
+#statusline.working #status-text {
+  color: var(--muted);
+}
+
+#status-right {
+  color: var(--faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* composerView: a bold ink "❯" ahead of the input. */
+#prompt-marker {
+  color: var(--ink);
+  font-weight: 700;
+  align-self: center;
+  flex: none;
 }
 
 #transcript {
@@ -70,10 +137,83 @@ html, body {
   line-height: 1.45;
 }
 
+.block {
+  margin-bottom: 0.75rem;
+}
+
+/* transcript.go: user rows are a bold ink ">" then the text. */
+.block.user {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.block.user::before {
+  content: "> ";
+  color: var(--ink);
+}
+
+/* Reasoning and tool summaries are indented two spaces in the TUI. */
+.block.reasoning {
+  color: var(--muted);
+  padding-left: 1ch;
+}
+
+.block.tool .name {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.block.tool .summary {
+  color: var(--faint);
+  display: block;
+  padding-left: 2ch;
+}
+
+.block.error {
+  color: var(--red);
+}
+
+.block.error::before {
+  content: "✗ ";
+}
+
+.block.system,
+.block.welcome {
+  color: var(--faint);
+}
+
+.block.thinking {
+  color: var(--muted);
+  animation: thinking-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes thinking-pulse {
+  0%, 100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.block.session {
+  color: var(--faint);
+  font-size: 0.85rem;
+  border-top: 1px dashed var(--line2);
+  padding-top: 0.35rem;
+}
+
+.block.session.ok {
+  color: var(--green);
+}
+
+.block.session.err {
+  color: var(--red);
+}
+
 /* Rendered markdown lives inside .block.reply. The transcript is
    white-space: pre-wrap for the plain-text blocks, so block elements here
-   reset it and supply their own spacing instead of inheriting stray
-   newlines from the source. */
+   reset it and supply their own spacing. */
 .block.reply {
   white-space: normal;
 }
@@ -96,6 +236,7 @@ html, body {
   margin: 0.9rem 0 0.5rem;
   line-height: 1.25;
   font-size: 1rem;
+  color: var(--ink);
 }
 
 .block.reply h1 {
@@ -117,16 +258,17 @@ html, body {
 }
 
 .block.reply code {
-  background: #1a1a1e;
-  border: 1px solid var(--border);
+  background: var(--prompt-bg);
+  border: 1px solid var(--line);
   border-radius: 4px;
   padding: 0.05rem 0.3rem;
   font-size: 0.9em;
+  color: var(--amber);
 }
 
 .block.reply pre {
-  background: #1a1a1e;
-  border: 1px solid var(--border);
+  background: var(--prompt-bg);
+  border: 1px solid var(--line);
   border-radius: 6px;
   padding: 0.7rem 0.85rem;
   margin: 0 0 0.6rem;
@@ -138,93 +280,23 @@ html, body {
   border: none;
   padding: 0;
   font-size: 0.9em;
+  color: var(--ink);
 }
 
 .block.reply blockquote {
   margin: 0 0 0.6rem;
   padding-left: 0.8rem;
-  border-left: 2px solid var(--border);
+  border-left: 2px solid var(--line2);
   color: var(--faint);
 }
 
 .block.reply a {
-  color: var(--accent);
+  color: var(--blue);
 }
 
 .block.reply strong {
   font-weight: 600;
-}
-
-.block {
-  margin-bottom: 0.75rem;
-}
-
-.block.user {
   color: var(--ink);
-}
-
-.block.user::before {
-  content: "> ";
-  color: var(--faint);
-}
-
-.block.reasoning {
-  color: var(--muted);
-}
-
-.block.tool {
-  color: var(--ink);
-}
-
-.block.tool .name {
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.block.tool .summary {
-  color: var(--faint);
-  display: block;
-}
-
-.block.error {
-  color: var(--red);
-}
-
-.block.system {
-  color: var(--faint);
-}
-
-.block.thinking {
-  color: var(--muted);
-  animation: thinking-pulse 1.4s ease-in-out infinite;
-}
-
-@keyframes thinking-pulse {
-  0%, 100% {
-    opacity: 0.5;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
-.block.welcome {
-  color: var(--faint);
-}
-
-.block.session {
-  color: var(--faint);
-  font-size: 0.85rem;
-  border-top: 1px dashed var(--border);
-  padding-top: 0.35rem;
-}
-
-.block.session.ok {
-  color: var(--green);
-}
-
-.block.session.err {
-  color: var(--red);
 }
 
 #composer {
@@ -232,8 +304,8 @@ html, body {
   display: flex;
   align-items: stretch;
   gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  border-top: 1px solid var(--border);
+  padding: 0.75rem 1rem 0.4rem;
+  border-top: 1px solid var(--line2);
 }
 
 .command-palette {
@@ -242,8 +314,8 @@ html, body {
   right: 1rem;
   bottom: 100%;
   margin-bottom: 0.4rem;
-  background: var(--bg);
-  border: 1px solid var(--border);
+  background: var(--panel);
+  border: 1px solid var(--line2);
   border-radius: 8px;
   padding: 0.3rem;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
@@ -257,13 +329,14 @@ html, body {
   display: flex;
 }
 
+/* promptBg in the TUI: the input sits on its own raised panel. */
 #prompt-input {
   flex: 1;
   resize: none;
   overflow-y: auto;
   max-height: 12rem;
-  background: transparent;
-  border: 1px solid var(--border);
+  background: var(--prompt-bg);
+  border: 1px solid var(--line);
   color: var(--ink);
   border-radius: 6px;
   padding: 0.5rem 3.2rem 0.5rem 0.5rem;
@@ -271,27 +344,33 @@ html, body {
   font-size: 1rem;
 }
 
+#prompt-input::placeholder {
+  color: var(--faintest);
+}
+
 #history-indicator {
   position: absolute;
   top: 0.5rem;
   right: 0.6rem;
-  background: var(--border);
-  color: var(--faint);
+  background: var(--line2);
+  color: var(--ink);
   font-size: 0.75rem;
   padding: 0.1rem 0.45rem;
   border-radius: 999px;
   pointer-events: none;
 }
 
+/* badge in theme.go: onAccent text on accent, bold. */
 #send-btn {
   flex: none;
   background: var(--accent);
-  color: white;
+  color: var(--on-accent);
   border: none;
   border-radius: 6px;
   padding: 0.55rem 1.25rem;
   font: inherit;
   font-size: 1rem;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -302,8 +381,8 @@ html, body {
 
 #send-btn.stopping {
   background: transparent;
-  border: 1px solid var(--accent);
-  color: var(--accent);
+  border: 1px solid var(--red);
+  color: var(--red);
 }
 
 .picker-overlay {
@@ -322,8 +401,8 @@ html, body {
   max-height: 70vh;
   display: flex;
   flex-direction: column;
-  background: var(--bg);
-  border: 1px solid var(--border);
+  background: var(--panel);
+  border: 1px solid var(--line2);
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
@@ -333,23 +412,26 @@ html, body {
   padding: 0.6rem 0.9rem;
   color: var(--ink);
   font-weight: 600;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--line);
 }
 
 .picker-filter {
   margin: 0.6rem 0.9rem;
-  background: transparent;
-  border: 1px solid var(--border);
+  background: var(--prompt-bg);
+  border: 1px solid var(--line);
   color: var(--ink);
   border-radius: 6px;
   padding: 0.4rem 0.6rem;
   font: inherit;
 }
 
+.picker-filter::placeholder {
+  color: var(--faintest);
+}
+
 .picker-filter:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(214, 40, 40, 0.35);
 }
 
 .picker-list {
@@ -379,13 +461,16 @@ html, body {
   white-space: nowrap;
 }
 
+/* selectedRow in theme.go: onAccent on accent, bold. */
 .picker-row.selected {
   background: var(--accent);
-  color: white;
+  color: var(--on-accent);
+  font-weight: 600;
 }
 
 .picker-row.selected .meta {
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--on-accent);
+  opacity: 0.75;
 }
 
 .picker-empty {
@@ -397,5 +482,5 @@ html, body {
   color: var(--faint);
   font-size: 0.8rem;
   padding: 0.4rem 0.9rem;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--line);
 }
