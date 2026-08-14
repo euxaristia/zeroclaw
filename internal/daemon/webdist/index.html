@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>zeroclaw</title>
   
-<link rel="stylesheet" crossorigin href="./chunk-wrghhz6a.css"><script type="module" crossorigin src="./chunk-kv0c66bf.js"></script></head>
+<link rel="stylesheet" crossorigin href="./chunk-z3fc521t.css"><script type="module" crossorigin src="./chunk-jcdctebg.js"></script></head>
 <body>
   <div id="app">
     <!-- Mirrors internal/tui/model.go's titleBar: accent badge, faint
@@ -17,6 +17,14 @@
     </header>
 
     <main id="transcript"></main>
+
+    <!-- composerDividerLine: a quiet model-only reminder sitting in the rule
+         above the input. The provider is not repeated here; it lives in the
+         title bar. -->
+    <div id="composer-divider">
+      <span class="rule"></span>
+      <span id="composer-model"></span>
+    </div>
 
     <form id="composer">
       <span id="prompt-marker">❯</span>

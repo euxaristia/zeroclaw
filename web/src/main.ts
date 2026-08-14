@@ -125,19 +125,28 @@ const promptInput = document.getElementById("prompt-input") as HTMLTextAreaEleme
 const sendBtn = document.getElementById("send-btn") as HTMLButtonElement;
 const historyIndicator = document.getElementById("history-indicator") as HTMLSpanElement;
 const modelIndicator = document.getElementById("model-indicator") as HTMLSpanElement;
+const composerModel = document.getElementById("composer-model") as HTMLSpanElement;
 const statusline = document.getElementById("statusline") as HTMLElement;
 const statusText = document.getElementById("status-text") as HTMLSpanElement;
 const statusRight = document.getElementById("status-right") as HTMLSpanElement;
 
-// titleBar's right-hand side: "provider/model", or just the model when no
-// provider is set. Empty until something actually selects one, rather than
-// guessing a default that may not be what the daemon uses.
+// Zero shows the model in two places and the web UI follows: titleModelSegment
+// puts "provider/model" at the right of the title bar, and composerDividerLine
+// repeats the model alone, muted, in the rule above the input. The provider is
+// deliberately not repeated down there.
 function updateModelIndicator() {
-  if (currentModel && currentProvider) {
-    modelIndicator.textContent = `${currentProvider}/${currentModel}`;
+  const provider = currentProvider?.trim() ?? "";
+  const model = currentModel?.trim() ?? "";
+
+  if (!provider && !model) {
+    modelIndicator.textContent = "no provider";
+    modelIndicator.classList.add("unset");
   } else {
-    modelIndicator.textContent = currentModel ?? currentProvider ?? "";
+    modelIndicator.textContent = provider && model ? `${provider}/${model}` : model || provider;
+    modelIndicator.classList.remove("unset");
   }
+
+  composerModel.textContent = model || "no model";
 }
 
 // statusLine: green "ready" when idle, muted "working Ns" counting up while

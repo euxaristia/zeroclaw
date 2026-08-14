@@ -85,6 +85,10 @@ html, body {
   text-overflow: ellipsis;
 }
 
+#model-indicator.unset {
+  color: var(--muted);
+}
+
 #conv-input:focus,
 #prompt-input:focus {
   outline: none;
@@ -299,13 +303,35 @@ html, body {
   color: var(--ink);
 }
 
+/* The rule carries the model label at its right end, the way the TUI's
+   composer border does. It replaces the composer's own top border. */
+#composer-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0 1rem;
+  font-size: 0.8rem;
+}
+
+#composer-divider .rule {
+  flex: 1;
+  border-top: 1px solid var(--line2);
+}
+
+#composer-model {
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 60%;
+}
+
 #composer {
   position: relative;
   display: flex;
   align-items: stretch;
   gap: 0.5rem;
-  padding: 0.75rem 1rem 0.4rem;
-  border-top: 1px solid var(--line2);
+  padding: 0.6rem 1rem 0.4rem;
 }
 
 .command-palette {
