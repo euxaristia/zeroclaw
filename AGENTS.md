@@ -214,7 +214,11 @@ zeroclaw/
     config/              host config (~/.zeroclaw/config.json) + secrets
   web/                    TypeScript web UI (Bun, not npm), built and served
                          as a static bundle by zeroclawd; ports the CLI chat
-                         REPL to a browser, talks to the same RPC plane
+                         REPL to a browser, talks to the same RPC plane.
+                         `bun run build` regenerates internal/daemon/webdist
+                         (committed, embedded via go:embed); `bun test` and
+                         `bun run typecheck` are its checks. Set
+                         ZEROCLAW_WEB_DIR to serve off disk while iterating.
   env/
     Dockerfile
     LICENSE.zero         MIT notice for the bundled zero binary
@@ -230,7 +234,10 @@ zeroclaw/
 The original milestones M0 (walking skeleton), M1 (conversations + daemon/client
 split), M2 (autonomy: heartbeats, schedules, memory), M3 (Telegram channel),
 and M4 (web UI: `web/`, served by `zeroclawd` off the existing RPC plane,
-launched with `zeroclaw web`) are done and shipped. Remaining hardening
+launched with `zeroclaw web`) are done and shipped. M4 covers streaming
+chat with markdown rendering, stop/cancel, the `/model`, `/provider`, and
+`/conversation` pickers with a slash-command palette, input history, and
+per-conversation transcripts restored on refresh. Remaining hardening
 items, none started:
 
 - Tier 3 fallback (run without Docker, clearly labeled as soft isolation).

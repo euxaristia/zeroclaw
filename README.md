@@ -94,6 +94,38 @@ a browser refresh is enough, no daemon restart:
 ZEROCLAW_WEB_DIR="$(pwd)/internal/daemon/webdist" ./zeroclaw.exe up
 ```
 
+The frontend has its own checks, run from `web/`:
+
+```
+bun test         # markdown renderer
+bun run typecheck
+```
+
+## Web UI 🌐
+
+`zeroclaw web` prints and opens a loopback URL carrying the daemon's bearer
+token. The page stores the token in `sessionStorage`, strips it from the URL
+bar, and from then on talks to the same `/status`, `/turn`, `/models`,
+`/providers`, and `/conversations` endpoints the CLI uses. It is a peer
+client of the CLI and Telegram, with no privileged path into the agent.
+
+- **Chat** with streaming replies rendered as markdown (fenced code,
+  headings, lists, links). Reasoning, tool calls, and tool results are shown
+  distinctly, mirroring the CLI's renderer.
+- **Stop** cancels a running turn. This is a real cancellation: the daemon
+  hands its request context to the driver, so dropping the connection kills
+  the in-container process.
+- **Slash commands**, with a palette that opens on `/` and narrows as you
+  type: `/model`, `/provider`, `/conversation` (each opens a filterable
+  picker), plus `/help` and `/clear`.
+- **Input history** with Up/Down and a position indicator.
+- **Per-conversation transcripts**, restored on refresh. Each conversation
+  is a separate zero session, so each keeps its own visible history.
+
+State lives in `sessionStorage`: it survives a refresh and clears when the
+tab closes. The daemon picks a fresh port and token on every restart, so
+re-run `zeroclaw web` after `zeroclaw up`.
+
 ## Development 🛠️
 
 Run these four checks before every commit. CI gates on them (see
@@ -191,3 +223,7 @@ heartbeat, memory loop), M3 (Telegram channel via long polling with a
 single-owner chat allowlist), and M4 (web UI, `zeroclaw web`) are done. Next:
 hardening (fallback tier, egress allowlist, autostart). Details in
 `AGENTS.md`.
+
+Known web UI limits: state is per browser tab (`sessionStorage`), the
+transcript is a local record rather than a replay of the agent's session
+history, and a daemon restart invalidates an open tab's port and token.
