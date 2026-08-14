@@ -70,15 +70,12 @@ export function openPicker(
         row.appendChild(label);
         row.appendChild(meta);
         row.addEventListener("click", () => close(item));
-        // Toggle the class directly instead of calling render(): rebuilding
-        // the whole list on every hover replaced the row out from under an
-        // in-progress mousedown/mouseup, which could eat the click.
-        row.addEventListener("mouseenter", () => {
-          list.querySelector(".picker-row.selected")?.classList.remove("selected");
-          row.classList.add("selected");
-          selected = i;
-          onHighlight?.(item);
-        });
+        // Hover is a pure CSS affordance. It deliberately does not move
+        // `selected`: the keyboard cursor is what Enter acts on, and letting
+        // a resting mouse hijack it meant arrowing to one row and pressing
+        // Enter could choose whichever row the pointer happened to sit over.
+        // Not touching the DOM on hover also keeps a row from being rebuilt
+        // out from under an in-progress click.
         list.appendChild(row);
       });
       if (filtered.length === 0) {

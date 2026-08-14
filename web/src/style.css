@@ -517,8 +517,16 @@ html, body {
   white-space: nowrap;
 }
 
+/* Hover is a quiet affordance showing what a click would take. It must stay
+   weaker than the keyboard selection below, and the .selected rule is
+   declared after it so it wins at equal specificity when a row is both. */
+.picker-row:hover {
+  background: var(--line);
+}
+
 /* selectedRow in theme.go: onAccent on accent, bold. */
-.picker-row.selected {
+.picker-row.selected,
+.picker-row.selected:hover {
   background: var(--accent);
   color: var(--on-accent);
   font-weight: 600;
