@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "bun build ./index.html --outdir ../internal/daemon/webdist --minify --sourcemap=none"
+    "build": "bun run build.ts"
   },
   "devDependencies": {
     "@types/bun": "latest"

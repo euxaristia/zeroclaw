@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"zeroclaw/internal/agent"
+	"zeroclaw/internal/catalog"
 	"zeroclaw/internal/channels"
 	"zeroclaw/internal/config"
 	"zeroclaw/internal/env"
@@ -141,6 +142,8 @@ func RunServer(agentNameOpt ...string) error {
 	mux := http.NewServeMux()
 	mux.Handle("GET /status", s.auth(http.HandlerFunc(s.handleStatus)))
 	mux.Handle("GET /conversations", s.auth(http.HandlerFunc(s.handleConversations)))
+	mux.Handle("GET /providers", s.auth(http.HandlerFunc(s.handleProviders)))
+	mux.Handle("GET /models", s.auth(http.HandlerFunc(s.handleModels)))
 	mux.Handle("POST /turn", s.auth(http.HandlerFunc(s.handleTurn)))
 	mux.Handle("POST /beat", s.auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		go s.runScheduled(schedCtx, "heartbeat", heartbeatPrompt)
@@ -256,6 +259,27 @@ func (s *server) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handleConversations(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(s.sessions.All())
+}
+
+func (s *server) handleProviders(w http.ResponseWriter, r *http.Request) {
+	_ = json.NewEncoder(w).Encode(catalog.Providers())
+}
+
+// handleModels mirrors internal/tui's model picker: try the provider's live
+// catalog when it has one, and fall back to the curated static list on any
+// failure (unsupported provider, network error, bad response) rather than
+// erroring the request.
+func (s *server) handleModels(w http.ResponseWriter, r *http.Request) {
+	provider := r.URL.Query().Get("provider")
+	if catalog.LiveFetchSupported(provider) {
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+		if items, err := catalog.FetchLive(ctx, provider); err == nil {
+			_ = json.NewEncoder(w).Encode(items)
+			return
+		}
+	}
+	_ = json.NewEncoder(w).Encode(catalog.StaticModels(provider))
 }
 
 func (s *server) handleTurn(w http.ResponseWriter, r *http.Request) {
