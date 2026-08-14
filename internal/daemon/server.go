@@ -16,6 +16,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -112,7 +113,18 @@ func RunServer(agentNameOpt ...string) error {
 		convs:        map[string]*sync.Mutex{},
 	}
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	// Port 0 lets the OS pick, which keeps multiple named agents from
+	// colliding. That means a fresh port on every restart, so a browser tab
+	// left open against the old one goes dead; ZEROCLAW_PORT pins it while
+	// iterating. Unset stays ephemeral, which is the right default.
+	addr := "127.0.0.1:0"
+	if p := os.Getenv("ZEROCLAW_PORT"); p != "" {
+		if _, err := strconv.Atoi(p); err != nil {
+			return fmt.Errorf("ZEROCLAW_PORT must be a port number, got %q", p)
+		}
+		addr = "127.0.0.1:" + p
+	}
+	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
 	}

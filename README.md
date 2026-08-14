@@ -94,6 +94,18 @@ a browser refresh is enough, no daemon restart:
 ZEROCLAW_WEB_DIR="$(pwd)/internal/daemon/webdist" ./zeroclaw.exe up
 ```
 
+The daemon otherwise binds an OS-assigned port, so every restart moves it
+and an open tab goes stale. `ZEROCLAW_PORT` pins it, which matters when a
+change is Go-side and does need a restart (`ZEROCLAW_WEB_DIR` only hot-serves
+frontend assets, never the binary):
+
+```
+ZEROCLAW_PORT=8787 ZEROCLAW_WEB_DIR="$(pwd)/internal/daemon/webdist" ./zeroclaw.exe up
+```
+
+The bearer token is still regenerated on each start, so re-run
+`zeroclaw web` after a restart to get a working URL.
+
 The frontend has its own checks, run from `web/`:
 
 ```
