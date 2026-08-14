@@ -63,9 +63,13 @@ export function openPicker(title: string, items: CatalogItem[]): Promise<Catalog
         row.appendChild(label);
         row.appendChild(meta);
         row.addEventListener("click", () => close(item));
+        // Toggle the class directly instead of calling render(): rebuilding
+        // the whole list on every hover replaced the row out from under an
+        // in-progress mousedown/mouseup, which could eat the click.
         row.addEventListener("mouseenter", () => {
+          list.querySelector(".picker-row.selected")?.classList.remove("selected");
+          row.classList.add("selected");
           selected = i;
-          render();
         });
         list.appendChild(row);
       });
