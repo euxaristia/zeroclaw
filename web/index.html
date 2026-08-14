@@ -17,7 +17,10 @@
     </header>
     <main id="transcript"></main>
     <form id="composer">
-      <textarea id="prompt-input" placeholder="Message zeroclaw…" rows="2" autofocus></textarea>
+      <div id="prompt-wrap">
+        <textarea id="prompt-input" placeholder="Message zeroclaw…" rows="2" autofocus></textarea>
+        <span id="history-indicator" hidden></span>
+      </div>
       <button id="send-btn" type="submit">Send</button>
     </form>
   </div>

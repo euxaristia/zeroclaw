@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>zeroclaw</title>
   
-<link rel="stylesheet" crossorigin href="./chunk-8ngfef5n.css"><script type="module" crossorigin src="./chunk-jr99t8zv.js"></script></head>
+<link rel="stylesheet" crossorigin href="./chunk-smvemqsv.css"><script type="module" crossorigin src="./chunk-bhcegjtg.js"></script></head>
 <body>
   <div id="app">
     <header id="statusbar">
@@ -17,7 +17,10 @@
     </header>
     <main id="transcript"></main>
     <form id="composer">
-      <textarea id="prompt-input" placeholder="Message zeroclaw…" rows="2" autofocus></textarea>
+      <div id="prompt-wrap">
+        <textarea id="prompt-input" placeholder="Message zeroclaw…" rows="2" autofocus></textarea>
+        <span id="history-indicator" hidden></span>
+      </div>
       <button id="send-btn" type="submit">Send</button>
     </form>
   </div>
