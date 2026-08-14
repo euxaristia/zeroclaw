@@ -77,6 +77,15 @@ go build -o zeroclaw.exe ./cmd/zeroclaw   # zeroclaw on unix
 seeds the agent's home with its identity, memory index, and heartbeat files
 (`env/bootstrap/`).
 
+The web UI (`web/`) is built with [Bun](https://bun.sh) (no npm) and its
+output is committed to `internal/daemon/webdist/` and embedded into the
+`zeroclaw` binary, so a bare clone builds and runs `zeroclaw web` without
+Bun installed. Only rebuild it when changing `web/` itself:
+
+```
+cd web && bun install && bun run build   # regenerates internal/daemon/webdist
+```
+
 ## Development 🛠️
 
 Run these four checks before every commit. CI gates on them (see
@@ -119,6 +128,7 @@ zeroclaw [-a <agent>] up        start environment + zeroclawd
 zeroclaw [-a <agent>] down      stop zeroclawd + environment
 zeroclaw [-a <agent>] status    daemon and environment state
 zeroclaw [-a <agent>] chat      interactive chat (default conversation: main)
+zeroclaw [-a <agent>] web       open the web UI in a browser
 zeroclaw [-a <agent>] exec "<p>" one turn in the main conversation
 zeroclaw race "<prompt>"        benchmark a prompt across multiple zero sessions
 zeroclaw visualizer [--watch]   live TUI dashboard of container, daemon & security metrics
@@ -161,6 +171,7 @@ internal/daemon/   zeroclawd: control plane, scheduler, launcher
 internal/agent/    driver interface, zero stream-JSON driver, conversation map
 internal/env/      container lifecycle, give/take, doctor
 internal/config/   host config in ~/.zeroclaw
+web/               web UI source (Bun/TypeScript), built into internal/daemon/webdist
 env/               Dockerfile and bootstrap seeds (env/bin is untracked)
 AGENTS.md          design, architecture, and guidelines for working on the repo
 ```
@@ -168,6 +179,7 @@ AGENTS.md          design, architecture, and guidelines for working on the repo
 ## Status 🗺️
 
 M0 (walking skeleton), M1 (daemon and client split), M2 (scheduler,
-heartbeat, memory loop), and M3 (Telegram channel via long polling with a
-single-owner chat allowlist) are done. Next: hardening (fallback tier, egress
-allowlist, autostart). Details in `AGENTS.md`.
+heartbeat, memory loop), M3 (Telegram channel via long polling with a
+single-owner chat allowlist), and M4 (web UI, `zeroclaw web`) are done. Next:
+hardening (fallback tier, egress allowlist, autostart). Details in
+`AGENTS.md`.

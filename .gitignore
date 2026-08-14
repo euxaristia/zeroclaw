@@ -1,3 +1,4 @@
 zeroclaw.exe
 env/bin/
 *.exe~
+web/node_modules/

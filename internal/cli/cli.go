@@ -25,6 +25,7 @@ const usage = `usage: zeroclaw [-a <agent>] <command>
   down                  stop zeroclawd + environment
   status                daemon and environment state
   chat [conversation]   interactive chat (default conversation: main)
+  web                   open the web UI in a browser
   exec "<prompt>"       one turn in the main conversation
   race "<prompt>"       benchmark a prompt across multiple zero sessions
   visualizer [--watch]  live TUI dashboard of container, daemon & security metrics
@@ -181,6 +182,8 @@ func Run(args []string) error {
 			conversation = args[1]
 		}
 		return chat(conversation, agentName)
+	case "web":
+		return openWeb(agentName)
 	case "beat":
 		return daemon.Beat(agentName)
 	case "give":
@@ -354,6 +357,22 @@ func chat(conversation string, agentName ...string) error {
 	})
 	if code != 0 {
 		return fmt.Errorf("chat exited with code %d", code)
+	}
+	return nil
+}
+
+// openWeb launches the web UI: the token travels once in the URL, the page
+// stores it client-side, and every request after that goes through the same
+// bearer-auth RPC plane as the CLI and Telegram.
+func openWeb(agentName string) error {
+	info, ok := daemon.Running(agentName)
+	if !ok {
+		return fmt.Errorf("zeroclawd is not running for agent %s; run `zeroclaw up`", agentName)
+	}
+	url := fmt.Sprintf("http://127.0.0.1:%d/?token=%s", info.Port, info.Token)
+	fmt.Println(url)
+	if err := openBrowser(url); err != nil {
+		fmt.Fprintln(os.Stderr, "warning: could not open a browser automatically:", err)
 	}
 	return nil
 }

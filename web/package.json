@@ -1,0 +1,11 @@
+{
+  "name": "zeroclaw-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun build ./index.html --outdir ../internal/daemon/webdist --minify --sourcemap=none"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}
