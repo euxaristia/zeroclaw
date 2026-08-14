@@ -150,9 +150,9 @@ func TestPickersAndModelSwitching(t *testing.T) {
 	}
 
 	// Filter query in picker
-	m.picker.appendQuery("gpt-4o")
+	m.picker.appendQuery("gpt-4.1")
 	if len(m.picker.items) == 0 {
-		t.Fatalf("expected filtered items for query gpt-4o")
+		t.Fatalf("expected filtered items for query gpt-4.1")
 	}
 
 	// Move and select

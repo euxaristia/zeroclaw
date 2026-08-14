@@ -105,28 +105,32 @@ func (m model) newModelPicker() *commandPicker {
 	allItems = append(allItems,
 		pickerItem{Group: "OpenRouter", Label: "DeepSeek V4 Pro", Value: "deepseek/deepseek-v4-pro", Meta: "1M ctx · tools", Provider: "openrouter"},
 		pickerItem{Group: "OpenRouter", Label: "DeepSeek V4 Flash", Value: "deepseek/deepseek-v4-flash-0731", Meta: "1M ctx · fast · tools", Provider: "openrouter"},
-		pickerItem{Group: "OpenRouter", Label: "Claude 3.5 Sonnet", Value: "anthropic/claude-3.5-sonnet", Meta: "200K ctx · tools · vision", Provider: "openrouter"},
-		pickerItem{Group: "OpenRouter", Label: "Claude 3.5 Haiku", Value: "anthropic/claude-3.5-haiku", Meta: "200K ctx · fast · tools", Provider: "openrouter"},
+		pickerItem{Group: "OpenRouter", Label: "Claude Sonnet 4.5", Value: "anthropic/claude-sonnet-4.5", Meta: "200K ctx · tools · vision", Provider: "openrouter"},
+		pickerItem{Group: "OpenRouter", Label: "Claude Haiku 4.5", Value: "anthropic/claude-haiku-4.5", Meta: "200K ctx · fast · tools", Provider: "openrouter"},
 		pickerItem{Group: "OpenRouter", Label: "Gemini 2.5 Flash", Value: "google/gemini-2.5-flash", Meta: "1M ctx · fast · vision", Provider: "openrouter"},
-		pickerItem{Group: "OpenRouter", Label: "Gemini 2.5 Pro", Value: "google/gemini-2.5-pro", Meta: "2M ctx · reasoning · vision", Provider: "openrouter"},
-		pickerItem{Group: "OpenRouter", Label: "GPT-4o", Value: "openai/gpt-4o", Meta: "128K ctx · tools · vision", Provider: "openrouter"},
-		pickerItem{Group: "OpenRouter", Label: "GPT-4o Mini", Value: "openai/gpt-4o-mini", Meta: "128K ctx · fast · tools", Provider: "openrouter"},
+		pickerItem{Group: "OpenRouter", Label: "Gemini 2.5 Pro", Value: "google/gemini-2.5-pro", Meta: "1M ctx · reasoning · vision", Provider: "openrouter"},
+		pickerItem{Group: "OpenRouter", Label: "GPT-4.1", Value: "openai/gpt-4.1", Meta: "1M ctx · tools · vision", Provider: "openrouter"},
+		pickerItem{Group: "OpenRouter", Label: "GPT-4.1 Mini", Value: "openai/gpt-4.1-mini", Meta: "1M ctx · fast · tools", Provider: "openrouter"},
+		pickerItem{Group: "OpenRouter", Label: "o3-mini", Value: "openai/o3-mini", Meta: "200K ctx · reasoning", Provider: "openrouter"},
 		pickerItem{Group: "OpenRouter", Label: "Llama 3.3 70B Instruct", Value: "meta-llama/llama-3.3-70b-instruct", Meta: "128K ctx · tools", Provider: "openrouter"},
 	)
 
 	// Anthropic Direct
 	allItems = append(allItems,
-		pickerItem{Group: "Anthropic", Label: "Claude 3.5 Sonnet", Value: "claude-3-5-sonnet-20241022", Meta: "200K ctx · tools · vision", Provider: "anthropic"},
-		pickerItem{Group: "Anthropic", Label: "Claude 3.5 Haiku", Value: "claude-3-5-haiku-20241022", Meta: "200K ctx · fast · tools", Provider: "anthropic"},
-		pickerItem{Group: "Anthropic", Label: "Claude 3 Opus", Value: "claude-3-opus-20240229", Meta: "200K ctx · reasoning", Provider: "anthropic"},
+		pickerItem{Group: "Anthropic", Label: "Claude Sonnet 4.5", Value: "claude-sonnet-4.5", Meta: "200K ctx · tools · vision", Provider: "anthropic"},
+		pickerItem{Group: "Anthropic", Label: "Claude Haiku 4.5", Value: "claude-haiku-4.5", Meta: "200K ctx · fast · tools", Provider: "anthropic"},
+		pickerItem{Group: "Anthropic", Label: "Claude Opus 4.1", Value: "claude-opus-4.1", Meta: "200K ctx · reasoning", Provider: "anthropic"},
 	)
 
 	// OpenAI Direct
 	allItems = append(allItems,
-		pickerItem{Group: "OpenAI", Label: "GPT-4o", Value: "gpt-4o", Meta: "128K ctx · tools · vision", Provider: "openai"},
-		pickerItem{Group: "OpenAI", Label: "GPT-4o Mini", Value: "gpt-4o-mini", Meta: "128K ctx · fast · tools", Provider: "openai"},
+		pickerItem{Group: "OpenAI", Label: "GPT-4.1", Value: "gpt-4.1", Meta: "1M ctx · tools · vision", Provider: "openai"},
+		pickerItem{Group: "OpenAI", Label: "GPT-4.1 Mini", Value: "gpt-4.1-mini", Meta: "1M ctx · fast · tools", Provider: "openai"},
+		pickerItem{Group: "OpenAI", Label: "GPT-4.1 Nano", Value: "gpt-4.1-nano", Meta: "1M ctx · fast · lightweight", Provider: "openai"},
 		pickerItem{Group: "OpenAI", Label: "o3-mini", Value: "o3-mini", Meta: "200K ctx · reasoning", Provider: "openai"},
 		pickerItem{Group: "OpenAI", Label: "o1", Value: "o1", Meta: "200K ctx · reasoning", Provider: "openai"},
+		pickerItem{Group: "OpenAI", Label: "GPT-4o", Value: "gpt-4o", Meta: "128K ctx · tools · vision", Provider: "openai"},
+		pickerItem{Group: "OpenAI", Label: "GPT-4o Mini", Value: "gpt-4o-mini", Meta: "128K ctx · fast · tools", Provider: "openai"},
 	)
 
 	// DeepSeek Direct
@@ -138,7 +142,8 @@ func (m model) newModelPicker() *commandPicker {
 	// Google Direct
 	allItems = append(allItems,
 		pickerItem{Group: "Google AI", Label: "Gemini 2.5 Flash", Value: "gemini-2.5-flash", Meta: "1M ctx · fast · vision", Provider: "google"},
-		pickerItem{Group: "Google AI", Label: "Gemini 2.5 Pro", Value: "gemini-2.5-pro", Meta: "2M ctx · reasoning · vision", Provider: "google"},
+		pickerItem{Group: "Google AI", Label: "Gemini 2.5 Pro", Value: "gemini-2.5-pro", Meta: "1M ctx · reasoning · vision", Provider: "google"},
+		pickerItem{Group: "Google AI", Label: "Gemini 2.5 Flash-Lite", Value: "gemini-2.5-flash-lite", Meta: "1M ctx · fast · lightweight", Provider: "google"},
 	)
 
 	// Ollama Local
