@@ -1,6 +1,7 @@
-import { readToken, fetchStatus, fetchProviders, fetchModels, streamTurn, type AgentEvent } from "./api";
+import { readToken, fetchStatus, fetchProviders, fetchModels, streamTurn, type AgentEvent, type CatalogItem } from "./api";
 import { openPicker } from "./picker";
 
+let authToken = "";
 let currentProvider: string | undefined;
 let currentModel: string | undefined;
 
@@ -37,7 +38,7 @@ function systemMessage(text: string) {
 // the model, matching the TUI's own silent fallthrough for unknown commands.
 // Returns true if the input was handled locally and should not be sent as a
 // prompt.
-async function handleSlashCommand(token: string, text: string): Promise<boolean> {
+async function handleSlashCommand(text: string): Promise<boolean> {
   if (text === "/help" || text === "/?" || text === "/h") {
     systemMessage(
       "zeroclaw web commands:\n" +
@@ -53,7 +54,7 @@ async function handleSlashCommand(token: string, text: string): Promise<boolean>
     return true;
   }
   if (text === "/model") {
-    const items = await fetchModels(token, currentProvider ?? "gitlawb-opengateway");
+    const items = await fetchModels(authToken, currentProvider ?? "gitlawb-opengateway");
     const picked = await openPicker("Choose a model", items);
     if (picked) {
       currentModel = picked.value;
@@ -62,7 +63,7 @@ async function handleSlashCommand(token: string, text: string): Promise<boolean>
     return true;
   }
   if (text === "/provider") {
-    const items = await fetchProviders(token);
+    const items = await fetchProviders(authToken);
     const picked = await openPicker("Choose a provider", items);
     if (picked) {
       currentProvider = picked.value;
@@ -84,6 +85,79 @@ async function handleSlashCommand(token: string, text: string): Promise<boolean>
     return true;
   }
   return false;
+}
+
+// --- Command palette -------------------------------------------------------
+// Mirrors internal/tui/model.go: typing "/" as the first character of the
+// input opens an overlay of matching slash commands that narrows live as you
+// keep typing (query = text after "/"), the same substring match picker.ts
+// uses for the /model and /provider item pickers. Arrow keys move the
+// selection, Enter runs the highlighted command, Escape clears the input and
+// closes it. Unlike the TUI's command picker (which also lists /theme and
+// /quit) this only lists commands the web UI actually implements.
+const COMMANDS: CatalogItem[] = [
+  { group: "Commands", label: "/model", value: "/model", meta: "Choose or switch active LLM model", provider: "" },
+  { group: "Commands", label: "/provider", value: "/provider", meta: "Choose or switch model provider", provider: "" },
+  { group: "Commands", label: "/help", value: "/help", meta: "Show available commands", provider: "" },
+  { group: "Commands", label: "/clear", value: "/clear", meta: "Clear chat transcript", provider: "" },
+];
+
+const palette = document.createElement("div");
+palette.className = "command-palette";
+palette.hidden = true;
+composer.appendChild(palette);
+
+let paletteItems: CatalogItem[] = [];
+let paletteSelected = 0;
+
+function renderPalette() {
+  palette.replaceChildren();
+  paletteItems.forEach((item, i) => {
+    const row = document.createElement("div");
+    row.className = "picker-row" + (i === paletteSelected ? " selected" : "");
+    const label = document.createElement("span");
+    label.textContent = item.label;
+    const meta = document.createElement("span");
+    meta.className = "meta";
+    meta.textContent = item.meta;
+    row.appendChild(label);
+    row.appendChild(meta);
+    // mousedown, not click: fires before the textarea blurs, matching the
+    // TUI's immediate command execution on selection.
+    row.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      void selectPaletteItem(i);
+    });
+    palette.appendChild(row);
+  });
+  palette.hidden = paletteItems.length === 0;
+}
+
+function updatePalette() {
+  const val = promptInput.value;
+  if (!val.startsWith("/") || val.includes("\n")) {
+    closePalette();
+    return;
+  }
+  const q = val.slice(1).toLowerCase();
+  paletteItems = COMMANDS.filter((c) => `${c.label} ${c.meta}`.toLowerCase().includes(q));
+  paletteSelected = 0;
+  renderPalette();
+}
+
+function closePalette() {
+  paletteItems = [];
+  palette.hidden = true;
+}
+
+async function selectPaletteItem(i: number) {
+  const item = paletteItems[i];
+  closePalette();
+  if (!item) return;
+  promptInput.value = "";
+  autoGrow();
+  await handleSlashCommand(item.value);
+  promptInput.focus();
 }
 
 // renderTurn mirrors cli.go's renderer.event: reasoning stays muted and
@@ -135,7 +209,7 @@ function renderTurn(): (ev: AgentEvent) => void {
   };
 }
 
-async function sendTurn(token: string) {
+async function sendTurn() {
   const prompt = promptInput.value.trim();
   if (!prompt) return;
   const conversation = convInput.value.trim() || "main";
@@ -144,14 +218,15 @@ async function sendTurn(token: string) {
   userEl.textContent = prompt;
   promptInput.value = "";
   autoGrow();
+  closePalette();
 
-  if (await handleSlashCommand(token, prompt)) return;
+  if (await handleSlashCommand(prompt)) return;
   sendBtn.disabled = true;
 
   try {
     const onEvent = renderTurn();
     const trailer = await streamTurn(
-      token,
+      authToken,
       conversation,
       prompt,
       { provider: currentProvider, model: currentModel },
@@ -177,9 +252,10 @@ async function main() {
     });
     return;
   }
+  authToken = token;
 
   try {
-    const status = await fetchStatus(token);
+    const status = await fetchStatus(authToken);
     statusAgent.textContent = `${status.agent} · ${status.container} · pid ${status.pid}`;
   } catch (err) {
     statusAgent.textContent = "connection failed";
@@ -189,9 +265,35 @@ async function main() {
 
   composer.addEventListener("submit", (e) => {
     e.preventDefault();
-    void sendTurn(token);
+    void sendTurn();
   });
   promptInput.addEventListener("keydown", (e) => {
+    if (!palette.hidden && paletteItems.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        paletteSelected = (paletteSelected + 1) % paletteItems.length;
+        renderPalette();
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        paletteSelected = (paletteSelected - 1 + paletteItems.length) % paletteItems.length;
+        renderPalette();
+        return;
+      }
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        void selectPaletteItem(paletteSelected);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        promptInput.value = "";
+        autoGrow();
+        closePalette();
+        return;
+      }
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       composer.requestSubmit();
@@ -199,7 +301,10 @@ async function main() {
   });
   // resize: none in CSS; grow with content instead of the native drag handle
   // (which rendered as a near-invisible nub in the wrong corner of the row).
-  promptInput.addEventListener("input", autoGrow);
+  promptInput.addEventListener("input", () => {
+    autoGrow();
+    updatePalette();
+  });
   autoGrow();
 }
 

@@ -125,11 +125,27 @@ html, body {
 }
 
 #composer {
+  position: relative;
   display: flex;
   align-items: flex-end;
   gap: 0.5rem;
   padding: 0.75rem 1rem;
   border-top: 1px solid var(--border);
+}
+
+.command-palette {
+  position: absolute;
+  left: 1rem;
+  right: 1rem;
+  bottom: 100%;
+  margin-bottom: 0.4rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.3rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  max-height: 40vh;
+  overflow-y: auto;
 }
 
 #prompt-input {
