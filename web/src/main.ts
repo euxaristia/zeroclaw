@@ -14,6 +14,7 @@ import { openPicker } from "./picker";
 import { renderMarkdown } from "./markdown";
 import { applyTheme, defaultTheme } from "./theme";
 import { THEMES } from "./themes";
+import { contextFill, gaugeText } from "./usage";
 
 let authToken = "";
 let currentProvider: string | undefined;
@@ -21,6 +22,7 @@ let currentModel: string | undefined;
 let inFlight: AbortController | null = null;
 let currentTheme = defaultTheme().name;
 let currentContextLabel = "";
+let currentContextWindow = 0;
 
 // Mirrors internal/tui/model.go's inputHistory/historyIdx/historyDraft: Up
 // walks back through previously sent prompts, Down walks forward, and the
@@ -131,7 +133,8 @@ const modelIndicator = document.getElementById("model-indicator") as HTMLSpanEle
 const composerModel = document.getElementById("composer-model") as HTMLSpanElement;
 const statusline = document.getElementById("statusline") as HTMLElement;
 const statusText = document.getElementById("status-text") as HTMLSpanElement;
-const statusRight = document.getElementById("status-right") as HTMLSpanElement;
+const contextGauge = document.getElementById("context-gauge") as HTMLSpanElement;
+const statusMeta = document.getElementById("status-meta") as HTMLSpanElement;
 
 // Zero shows the model in two places and the web UI follows: titleModelSegment
 // puts "provider/model" at the right of the title bar, and composerDividerLine
@@ -184,7 +187,20 @@ function setStatusWorking() {
 }
 
 function setSession(id: string) {
-  statusRight.textContent = id ? `session ${id}` : "";
+  statusMeta.textContent = id ? `session ${id}` : "";
+}
+
+// contextWindowSegment: "◔ used/window · NN%", graded green/amber/red at
+// zero's own 75% and 90% thresholds, hidden until both figures are known.
+function updateContextGauge(used: number) {
+  const fill = contextFill(used, currentContextWindow);
+  if (!fill) {
+    contextGauge.hidden = true;
+    return;
+  }
+  contextGauge.textContent = gaugeText(fill);
+  contextGauge.className = `fill-${fill.level}`;
+  contextGauge.hidden = false;
 }
 
 function appendBlock(className: string): HTMLDivElement {
@@ -628,6 +644,11 @@ function renderTurn(thinkingEl: HTMLElement | null): {
         if (ev.sessionId) setSession(ev.sessionId);
         if (thinking) thinking.textContent = `session ${ev.sessionId} · ${ev.provider} ${ev.model}`;
         break;
+      case "usage":
+        // zero reports the latest step's tokens; the gauge measures those
+        // against the window rather than accumulating across the session.
+        updateContextGauge(ev.promptTokens + ev.completionTokens);
+        break;
       case "reasoning":
         clearThinking();
         if (!reasoningEl) reasoningEl = appendBlock("reasoning");
@@ -757,14 +778,17 @@ async function main() {
 
   try {
     const status = await fetchStatus(authToken);
-    statusRight.textContent = `${status.agent} · ${status.container} · pid ${status.pid}`;
+    statusMeta.textContent = `${status.agent} · ${status.container} · pid ${status.pid}`;
     // Show what a turn would use before one has run. An explicit /model or
     // /provider from a previous session wins over the backend default.
     currentProvider ??= status.provider;
     currentModel ??= status.model;
     // Only meaningful while the model is the one /status described; a later
     // /model switch clears it until the next turn or status refresh.
-    if (currentModel === status.model) currentContextLabel = status.contextWindowLabel ?? "";
+    if (currentModel === status.model) {
+      currentContextLabel = status.contextWindowLabel ?? "";
+      currentContextWindow = status.contextWindow ?? 0;
+    }
     updateModelIndicator();
     setStatusReady();
   } catch (err) {

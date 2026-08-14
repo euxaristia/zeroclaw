@@ -28,6 +28,12 @@ type Event struct {
 	Message       string `json:"message"`
 	Provider      string `json:"provider"`
 	Model         string `json:"model"`
+	// Token counts from a "usage" event. The backend reports these per run;
+	// zeroclaw passes them through so a client can show context pressure
+	// rather than waiting to be surprised by automatic compaction.
+	PromptTokens     int `json:"promptTokens"`
+	CompletionTokens int `json:"completionTokens"`
+	TotalTokens      int `json:"totalTokens"`
 	Display       struct {
 		Kind    string `json:"kind"`
 		Summary string `json:"summary"`

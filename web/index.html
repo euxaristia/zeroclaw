@@ -38,7 +38,10 @@
     <!-- statusLine: accent dot, ready/working, session id on the right. -->
     <footer id="statusline">
       <span id="status-left"><span id="status-dot">●</span> <span id="status-text">connecting</span></span>
-      <span id="status-right"></span>
+      <span id="status-right">
+        <span id="context-gauge" hidden></span>
+        <span id="status-meta"></span>
+      </span>
     </footer>
   </div>
   <script type="module" src="./src/main.ts"></script>

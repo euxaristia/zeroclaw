@@ -15,6 +15,10 @@ export interface AgentEvent {
   message: string;
   provider: string;
   model: string;
+  // Present on "usage" events.
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
   display: {
     kind: string;
     summary: string;
