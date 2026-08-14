@@ -228,9 +228,10 @@ zeroclaw/
 ## Status
 
 The original milestones M0 (walking skeleton), M1 (conversations + daemon/client
-split), M2 (autonomy: heartbeats, schedules, memory), and M3 (Telegram channel)
-are done and shipped. M4 (web UI, porting the CLI chat REPL to `web/`) is
-scoped but not started. Remaining hardening items, none started:
+split), M2 (autonomy: heartbeats, schedules, memory), M3 (Telegram channel),
+and M4 (web UI: `web/`, served by `zeroclawd` off the existing RPC plane,
+launched with `zeroclaw web`) are done and shipped. Remaining hardening
+items, none started:
 
 - Tier 3 fallback (run without Docker, clearly labeled as soft isolation).
 - Egress allowlist proxy.

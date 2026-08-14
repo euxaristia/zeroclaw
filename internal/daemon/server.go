@@ -139,20 +139,26 @@ func RunServer(agentNameOpt ...string) error {
 
 	shutdown := make(chan struct{})
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /status", s.handleStatus)
-	mux.HandleFunc("GET /conversations", s.handleConversations)
-	mux.HandleFunc("POST /turn", s.handleTurn)
-	mux.HandleFunc("POST /beat", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("GET /status", s.auth(http.HandlerFunc(s.handleStatus)))
+	mux.Handle("GET /conversations", s.auth(http.HandlerFunc(s.handleConversations)))
+	mux.Handle("POST /turn", s.auth(http.HandlerFunc(s.handleTurn)))
+	mux.Handle("POST /beat", s.auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		go s.runScheduled(schedCtx, "heartbeat", heartbeatPrompt)
 		w.WriteHeader(http.StatusAccepted)
-	})
-	mux.HandleFunc("POST /shutdown", func(w http.ResponseWriter, r *http.Request) {
+	})))
+	mux.Handle("POST /shutdown", s.auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		close(shutdown)
-	})
+	})))
+	// The web UI shell is intentionally outside s.auth; see webUIHandler.
+	webUI, err := webUIHandler()
+	if err != nil {
+		return err
+	}
+	mux.Handle("/", webUI)
 
 	httpSrv := &http.Server{
-		Handler:           s.auth(mux),
+		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		IdleTimeout:       120 * time.Second,
