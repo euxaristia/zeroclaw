@@ -18,7 +18,7 @@ type Schedule struct {
 }
 
 type Config struct {
-	// Backend selects the execution backend ("zero" is the only supported value).
+	// Backend selects the execution backend; empty or "zero" selects ZeroDriver.
 	Backend string `json:"backend,omitempty"`
 	// HeartbeatEvery is a Go duration string; empty or "off" disables the
 	// heartbeat.

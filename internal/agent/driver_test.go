@@ -40,6 +40,9 @@ func TestDoctor(t *testing.T) {
 	if len(results) != 1 {
 		t.Fatalf("Doctor() returned %d results, want 1", len(results))
 	}
+	if results[0].Name != "zero inside container" {
+		t.Errorf("Doctor() Name = %q, want %q", results[0].Name, "zero inside container")
+	}
 	if results[0].OK {
 		t.Errorf("ZeroDriver.Doctor() returned OK=true for non-existent container")
 	}
