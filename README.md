@@ -132,7 +132,7 @@ client of the CLI and Telegram, with no privileged path into the agent.
   hands its request context to the driver, so dropping the connection kills
   the in-container process.
 - **Slash commands**, with a palette that opens on `/` and narrows as you
-  type: `/model`, `/provider`, `/conversation`, `/theme`, and `/effort` open
+  type: `/model`, `/provider`, `/auth`, `/conversation`, `/theme`, and `/effort` open
   filterable pickers; `/new`, `/retry`, `/copy`, `/export`, `/beat`,
   `/turns`, `/status`, `/help`, and `/clear` act directly.
 - **Esc cancels** a running turn, with a confirmation press, as in zero.

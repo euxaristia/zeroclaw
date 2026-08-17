@@ -18,6 +18,7 @@ import { renderMarkdown } from "./markdown";
 import { applyTheme, defaultTheme } from "./theme";
 import { THEMES } from "./themes";
 import { contextFill, gaugeText } from "./usage";
+import { applyRunStart, formatTitleModel, matchSlashCommands } from "./routing";
 
 let authToken = "";
 let currentProvider: string | undefined;
@@ -161,10 +162,10 @@ function updateStatusExtras() {
   statusExtras.textContent = parts.length ? ` · ${parts.join(" · ")}` : "";
 }
 
-// Zero shows the model in two places and the web UI follows: titleModelSegment
-// puts "provider/model" at the right of the title bar, and composerDividerLine
-// repeats the model alone, muted, in the rule above the input. The provider is
-// deliberately not repeated down there.
+// Zero shows the model in two places and the web UI follows: the title bar
+// names the profile and the model, and composerDividerLine repeats the model
+// alone, muted, in the rule above the input. The provider is deliberately
+// not repeated down there.
 function updateModelIndicator() {
   const provider = currentProvider?.trim() ?? "";
   const model = currentModel?.trim() ?? "";
@@ -175,7 +176,7 @@ function updateModelIndicator() {
     modelIndicator.classList.add("unset");
   } else {
     modelIndicator.classList.remove("unset");
-    modelIndicator.append(provider && model ? `${provider}/${model}` : model || provider);
+    modelIndicator.append(formatTitleModel(provider, model));
     // titleBar appends the context window in faint after the model, and
     // only when it is known.
     if (currentContextLabel) {
@@ -646,6 +647,10 @@ async function handleSlashCommand(text: string): Promise<boolean> {
     const picked = await openPicker("Choose a model", items);
     if (picked) {
       currentModel = picked.value;
+      // The catalog item carries the profile that owns this model id. Pin it
+      // so a later run_start reporting the API kind (openai) cannot send the
+      // next turn at the wrong backend.
+      if (picked.provider) currentProvider = picked.provider;
       updateModelIndicator();
       saveUIState();
       systemMessage(`Switched model to ${currentModel}`);
@@ -686,28 +691,8 @@ async function handleSlashCommand(text: string): Promise<boolean> {
 // --- Command palette -------------------------------------------------------
 // Mirrors internal/tui/model.go: typing "/" as the first character of the
 // input opens an overlay of matching slash commands that narrows live as you
-// keep typing (query = text after "/"), the same substring match picker.ts
-// uses for the /model and /provider item pickers. Arrow keys move the
-// selection, Enter runs the highlighted command, Escape clears the input and
-// closes it. Unlike the TUI's command picker (which also lists /theme and
-// /quit) this only lists commands the web UI actually implements.
-const COMMANDS: CatalogItem[] = [
-  { group: "Commands", label: "/model", value: "/model", meta: "Choose or switch active LLM model", provider: "" },
-  { group: "Commands", label: "/provider", value: "/provider", meta: "Choose or switch model provider", provider: "" },
-  { group: "Commands", label: "/auth", value: "/auth", meta: "Store an API key for a provider", provider: "" },
-  { group: "Commands", label: "/conversation", value: "/conversation", meta: "Switch conversation", provider: "" },
-  { group: "Commands", label: "/theme", value: "/theme", meta: "Choose a UI colour theme", provider: "" },
-  { group: "Commands", label: "/status", value: "/status", meta: "Show agent, container, and model", provider: "" },
-  { group: "Commands", label: "/effort", value: "/effort", meta: "Set reasoning effort", provider: "" },
-  { group: "Commands", label: "/turns", value: "/turns", meta: "Set the tool-turn budget", provider: "" },
-  { group: "Commands", label: "/new", value: "/new", meta: "Reset this conversation's session", provider: "" },
-  { group: "Commands", label: "/retry", value: "/retry", meta: "Resend the last prompt", provider: "" },
-  { group: "Commands", label: "/copy", value: "/copy", meta: "Copy the last reply", provider: "" },
-  { group: "Commands", label: "/export", value: "/export", meta: "Download the transcript", provider: "" },
-  { group: "Commands", label: "/beat", value: "/beat", meta: "Fire a heartbeat turn now", provider: "" },
-  { group: "Commands", label: "/help", value: "/help", meta: "Show available commands", provider: "" },
-  { group: "Commands", label: "/clear", value: "/clear", meta: "Clear chat transcript", provider: "" },
-];
+// keep typing. Command list and filter live in routing.ts so a missing
+// /auth is a failing test, not a silent palette hole.
 
 const palette = document.createElement("div");
 palette.className = "command-palette";
@@ -756,8 +741,7 @@ function updatePalette() {
     closePalette();
     return;
   }
-  const q = val.slice(1).toLowerCase();
-  paletteItems = COMMANDS.filter((c) => `${c.label} ${c.meta}`.toLowerCase().includes(q));
+  paletteItems = matchSlashCommands(val);
   paletteSelected = 0;
   renderPalette();
 }
@@ -852,15 +836,19 @@ function renderTurn(thinkingEl: HTMLElement | null): {
 
   const onEvent = (ev: AgentEvent) => {
     switch (ev.type) {
-      case "run_start":
-        // The daemon reports what it actually used, which is the only way
-        // an "auto" route resolves to a concrete model.
-        if (ev.model) currentModel = ev.model;
-        if (ev.provider) currentProvider = ev.provider;
+      case "run_start": {
+        // Adopt the routed model so /model auto is visible. Do not adopt
+        // ev.provider: that field is the API kind, not the profile name.
+        const next = applyRunStart({ provider: currentProvider, model: currentModel }, ev);
+        currentProvider = next.provider;
+        currentModel = next.model;
         updateModelIndicator();
+        saveUIState();
         if (ev.sessionId) setSession(ev.sessionId);
-        if (thinking) thinking.textContent = `session ${ev.sessionId} · ${ev.provider} ${ev.model}`;
+        const shownProvider = currentProvider || ev.provider;
+        if (thinking) thinking.textContent = `session ${ev.sessionId} · ${shownProvider} ${ev.model}`;
         break;
+      }
       case "usage":
         // zero reports the latest step's tokens; the gauge measures those
         // against the window rather than accumulating across the session.
