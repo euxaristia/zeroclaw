@@ -72,6 +72,19 @@ func TestStaticModelsFiltersByProvider(t *testing.T) {
 	}
 }
 
+func TestKeyedAuth(t *testing.T) {
+	for _, id := range []string{"gitlawb-opengateway", "openrouter", "anthropic", "openai", "deepseek", "google", "aimlapi"} {
+		if !KeyedAuth(id) {
+			t.Errorf("KeyedAuth(%q) = false, want true", id)
+		}
+	}
+	for _, id := range []string{"ollama", "custom-openai-compatible", "unknown-provider"} {
+		if KeyedAuth(id) {
+			t.Errorf("KeyedAuth(%q) = true, want false", id)
+		}
+	}
+}
+
 func TestLiveFetchSupported(t *testing.T) {
 	if !LiveFetchSupported("openrouter") || !LiveFetchSupported("gitlawb-opengateway") {
 		t.Error("expected openrouter and gitlawb-opengateway to support live fetch")

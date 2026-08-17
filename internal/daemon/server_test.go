@@ -334,6 +334,42 @@ func TestHandleModelsFallsBackToStatic(t *testing.T) {
 	}
 }
 
+func TestHandleSetCredentialRejectsNonKeyedProvider(t *testing.T) {
+	s := newTestServer()
+	req := httptest.NewRequest(http.MethodPut, "/credentials/ollama", strings.NewReader(`{"apiKey":"sk-test"}`))
+	req.SetPathValue("provider", "ollama")
+	rec := httptest.NewRecorder()
+	s.handleSetCredential(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status code = %d, want 400", rec.Code)
+	}
+}
+
+func TestHandleSetCredentialRejectsEmptyKey(t *testing.T) {
+	s := newTestServer()
+	req := httptest.NewRequest(http.MethodPut, "/credentials/openai", strings.NewReader(`{"apiKey":"   "}`))
+	req.SetPathValue("provider", "openai")
+	rec := httptest.NewRecorder()
+	s.handleSetCredential(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status code = %d, want 400", rec.Code)
+	}
+}
+
+func TestHandleDeleteCredentialRejectsNonKeyedProvider(t *testing.T) {
+	s := newTestServer()
+	req := httptest.NewRequest(http.MethodDelete, "/credentials/ollama", nil)
+	req.SetPathValue("provider", "ollama")
+	rec := httptest.NewRecorder()
+	s.handleDeleteCredential(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status code = %d, want 400", rec.Code)
+	}
+}
+
 func mustSessionStore(t *testing.T) *agent.SessionStore {
 	t.Helper()
 	store, err := agent.OpenSessionStore(t.TempDir() + "/c.json")

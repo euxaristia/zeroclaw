@@ -4,6 +4,9 @@ import {
   fetchProviders,
   fetchModels,
   fetchConversations,
+  fetchCredentials,
+  setCredential,
+  deleteCredential,
   resetConversation,
   fireHeartbeat,
   streamTurn,
@@ -302,6 +305,89 @@ function systemMessage(text: string) {
   saveTranscript();
 }
 
+// openKeyPrompt is a password-style modal for pasting an API key, reusing the
+// picker overlay chrome. The key stays in the input's value and is never
+// rendered into the transcript. Returns the entered key, "" for an explicit
+// empty submit (which the caller may treat as "remove"), or null on cancel.
+function openKeyPrompt(provider: string, hasKey: boolean): Promise<string | null> {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "picker-overlay";
+    const box = document.createElement("div");
+    box.className = "picker-box";
+    overlay.appendChild(box);
+
+    const title = document.createElement("div");
+    title.className = "picker-title";
+    title.textContent = `API key for ${provider}`;
+    box.appendChild(title);
+
+    const input = document.createElement("input");
+    input.type = "password";
+    input.className = "picker-filter";
+    input.placeholder = hasKey ? "paste a new key, or leave empty to remove" : "paste the API key";
+    input.autocomplete = "off";
+    input.spellcheck = false;
+    box.appendChild(input);
+
+    const hint = document.createElement("div");
+    hint.className = "picker-hint";
+    hint.textContent = "Enter save · Esc cancel";
+    box.appendChild(hint);
+
+    function close(value: string | null) {
+      document.removeEventListener("keydown", onKeydown, true);
+      overlay.remove();
+      resolve(value);
+    }
+
+    function onKeydown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        close(null);
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        close(input.value.trim());
+      }
+    }
+
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) close(null);
+    });
+    document.addEventListener("keydown", onKeydown, true);
+    document.body.appendChild(overlay);
+    input.focus();
+  });
+}
+
+// setKeyForProvider stores (or, on an empty submit, removes) the API key for
+// a provider. The key is sent straight to the daemon and never rendered.
+async function setKeyForProvider(provider: string) {
+  let stored: string[];
+  try {
+    stored = await fetchCredentials(authToken);
+  } catch (err) {
+    fail(err instanceof Error ? err.message : String(err));
+    return;
+  }
+  const hasKey = stored.includes(provider);
+  const value = await openKeyPrompt(provider, hasKey);
+  if (value === null) return;
+  try {
+    if (value === "") {
+      if (hasKey) {
+        await deleteCredential(authToken, provider);
+        systemMessage(`Removed the API key for ${provider}.`);
+      }
+      return;
+    }
+    await setCredential(authToken, provider, value);
+    systemMessage(`Stored the API key for ${provider}.`);
+  } catch (err) {
+    fail(err instanceof Error ? err.message : String(err));
+  }
+}
+
 // handleSlashCommand mirrors internal/tui/model.go's executeSlashCommandWithPrev:
 // /help and /clear act locally, the argument forms of /model and /provider set
 // local state threaded into the next turn, and bare /model or /provider open
@@ -316,6 +402,7 @@ async function handleSlashCommand(text: string): Promise<boolean> {
       "zeroclaw web commands:\n" +
         "  /model [name]         Choose or switch active LLM model\n" +
         "  /provider [name]      Choose or switch model provider\n" +
+        "  /auth [provider]      Store an API key for a provider\n" +
         "  /conversation [name]  Switch conversation (own session + history)\n" +
         "  /help                 Show available commands\n" +
         "  /clear                Clear chat transcript",
@@ -531,6 +618,29 @@ async function handleSlashCommand(text: string): Promise<boolean> {
     }
     return true;
   }
+  // /auth stores an API key for a provider, zero's TUI "paste an API key"
+  // step. The key is typed into a password prompt, never into the composer,
+  // so it never lands in the transcript or input history.
+  if (text === "/auth" || text.startsWith("/auth ")) {
+    const arg = text.slice("/auth".length).trim();
+    if (arg) {
+      await setKeyForProvider(arg);
+      return true;
+    }
+    try {
+      const providers = (await fetchProviders(authToken)).filter((p) => p.keyAuth);
+      const stored = new Set(await fetchCredentials(authToken));
+      const items = providers.map((p) => ({
+        ...p,
+        meta: stored.has(p.value) ? (p.meta ? `key set · ${p.meta}` : "key set") : p.meta,
+      }));
+      const picked = await openPicker("Choose a provider to authenticate", items);
+      if (picked) await setKeyForProvider(picked.value);
+    } catch (err) {
+      fail(err instanceof Error ? err.message : String(err));
+    }
+    return true;
+  }
   if (text === "/model") {
     const items = await fetchModels(authToken, currentProvider ?? "gitlawb-opengateway");
     const picked = await openPicker("Choose a model", items);
@@ -584,6 +694,7 @@ async function handleSlashCommand(text: string): Promise<boolean> {
 const COMMANDS: CatalogItem[] = [
   { group: "Commands", label: "/model", value: "/model", meta: "Choose or switch active LLM model", provider: "" },
   { group: "Commands", label: "/provider", value: "/provider", meta: "Choose or switch model provider", provider: "" },
+  { group: "Commands", label: "/auth", value: "/auth", meta: "Store an API key for a provider", provider: "" },
   { group: "Commands", label: "/conversation", value: "/conversation", meta: "Switch conversation", provider: "" },
   { group: "Commands", label: "/theme", value: "/theme", meta: "Choose a UI colour theme", provider: "" },
   { group: "Commands", label: "/status", value: "/status", meta: "Show agent, container, and model", provider: "" },
