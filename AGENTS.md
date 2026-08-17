@@ -237,8 +237,8 @@ The original milestones M0 (walking skeleton), M1 (conversations + daemon/client
 split), M2 (autonomy: heartbeats, schedules, memory), M3 (Telegram channel),
 and M4 (web UI: `web/`, served by `zeroclawd` off the existing RPC plane,
 launched with `zeroclaw web`) are done and shipped. M4 covers streaming
-chat with markdown rendering, stop/cancel, the `/model`, `/provider`, and
-`/conversation` pickers with a slash-command palette, input history, and
+chat with markdown rendering, stop/cancel, the `/model`, `/provider`, `/auth`,
+and `/conversation` pickers with a slash-command palette, input history, and
 per-conversation transcripts restored on refresh. Remaining hardening
 items, none started:
 

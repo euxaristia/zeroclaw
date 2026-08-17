@@ -151,6 +151,20 @@ func buildZeroArgs(opts TurnOptions) []string {
 	return args
 }
 
+// annotateStreamEvent rewrites a run_start so its provider field is the
+// profile we asked for, not zero's API kind. OpenAI-compatible profiles
+// (gitlawb-opengateway, openrouter, aimlapi) all report provider=openai;
+// clients that display or persist that field would then send the next turn
+// to platform.openai.com.
+func annotateStreamEvent(ev *Event, opts TurnOptions) {
+	if ev == nil || ev.Type != "run_start" {
+		return
+	}
+	if opts.Provider != "" {
+		ev.Provider = opts.Provider
+	}
+}
+
 func (ZeroDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Event)) (res TurnResult, err error) {
 	args := buildZeroArgs(opts)
 	cmd := env.DockerCommandContext(ctx, args...)
@@ -208,6 +222,7 @@ func (ZeroDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Event
 		if json.Unmarshal(line, &ev) != nil {
 			continue
 		}
+		annotateStreamEvent(&ev, opts)
 		if onEvent != nil {
 			onEvent(ev)
 		}
