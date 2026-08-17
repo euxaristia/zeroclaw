@@ -22,7 +22,7 @@ const usage = `usage: zeroclaw [-a <agent>] <command>
   up                    start environment + zeroclawd
   down                  stop zeroclawd + environment
   status                daemon and environment state
-  web                   open the web UI in a browser
+  web, chat             open the web UI in a browser
   exec "<prompt>"       one turn in the main conversation
   race "<prompt>"       benchmark a prompt across multiple zero sessions
   visualizer [--watch]  live TUI dashboard of container, daemon & security metrics
@@ -119,6 +119,9 @@ func Run(args []string) error {
 			case "exec":
 				fmt.Println(`usage: zeroclaw [-a <agent>] exec "<prompt>"`)
 				return nil
+			case "web", "chat":
+				fmt.Println("usage: zeroclaw [-a <agent>] web|chat")
+				return nil
 			case "race":
 				fmt.Println(`usage: zeroclaw race "<prompt>"`)
 				return nil
@@ -200,9 +203,7 @@ func Run(args []string) error {
 			return errors.New(`usage: zeroclaw exec "<prompt>"`)
 		}
 		return execTurn("main", prompt, agentName)
-	case "chat":
-		return errors.New("the terminal chat UI has been removed; run `zeroclaw web` for the browser UI, or `zeroclaw exec \"<prompt>\"` for one turn")
-	case "web":
+	case "chat", "web":
 		if err := noExtraArgs(args); err != nil {
 			return err
 		}

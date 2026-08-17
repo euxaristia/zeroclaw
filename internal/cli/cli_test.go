@@ -88,7 +88,7 @@ func TestRunDaemonArgCount(t *testing.T) {
 // (e.g. the reported `zeroclaw web --dev`, which isn't a real flag) errors
 // immediately instead of being silently ignored.
 func TestRunNoExtraArgs(t *testing.T) {
-	for _, cmd := range []string{"list", "up", "down", "status", "doctor", "audit", "web", "beat", "reset-container"} {
+	for _, cmd := range []string{"list", "up", "down", "status", "doctor", "audit", "web", "chat", "beat", "reset-container"} {
 		err := Run([]string{cmd, "--dev"})
 		if err == nil {
 			t.Errorf("Run([%s, --dev]) returned nil error, want rejection of the unknown argument", cmd)
@@ -232,6 +232,8 @@ func TestRunHelp(t *testing.T) {
 		{name: "contextual help give", args: []string{"help", "give"}, wantSubstr: "usage: zeroclaw [-a <agent>] give <file>"},
 		{name: "contextual help take", args: []string{"help", "take"}, wantSubstr: "usage: zeroclaw [-a <agent>] take <path> [dest]"},
 		{name: "contextual help exec", args: []string{"help", "exec"}, wantSubstr: `usage: zeroclaw [-a <agent>] exec "<prompt>"`},
+		{name: "contextual help web", args: []string{"help", "web"}, wantSubstr: "usage: zeroclaw [-a <agent>] web|chat"},
+		{name: "contextual help chat", args: []string{"help", "chat"}, wantSubstr: "usage: zeroclaw [-a <agent>] web|chat"},
 		{name: "contextual help race", args: []string{"help", "race"}, wantSubstr: `usage: zeroclaw race "<prompt>"`},
 		{name: "contextual help reset-container", args: []string{"help", "reset-container"}, wantSubstr: "usage: zeroclaw [-a <agent>] reset-container"},
 		{name: "contextual help reset-env", args: []string{"help", "reset-env"}, wantSubstr: "usage: zeroclaw [-a <agent>] reset-env --force"},
