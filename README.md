@@ -186,6 +186,7 @@ zeroclaw [-a <agent>] up        start environment + zeroclawd
 zeroclaw [-a <agent>] down      stop zeroclawd + environment
 zeroclaw [-a <agent>] status    daemon and environment state
 zeroclaw [-a <agent>] web       open the web UI in a browser
+zeroclaw [-a <agent>] chat      alias for web
 zeroclaw [-a <agent>] exec "<p>" one turn in the main conversation
 zeroclaw race "<prompt>"        benchmark a prompt across multiple zero sessions
 zeroclaw visualizer [--watch]   live TUI dashboard of container, daemon & security metrics
