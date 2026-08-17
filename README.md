@@ -130,7 +130,9 @@ client of the CLI and Telegram, with no privileged path into the agent.
   distinctly.
 - **Stop** cancels a running turn. This is a real cancellation: the daemon
   hands its request context to the driver, so dropping the connection kills
-  the in-container process.
+  the in-container process. Enter with text while a turn is running queues
+  a follow-up instead of aborting. The button reads Stop only when the box
+  is empty.
 - **Slash commands**, with a palette that opens on `/` and narrows as you
   type: `/model`, `/provider`, `/auth`, `/conversation`, `/theme`, and `/effort` open
   filterable pickers; `/new`, `/retry`, `/copy`, `/export`, `/beat`,

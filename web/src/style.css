@@ -196,6 +196,19 @@ html, body {
   color: var(--ink);
 }
 
+/* Follow-ups typed while a turn is still running. The class is stripped
+   when that prompt is actually sent, and on transcript restore so a
+   refresh cannot leave a stale "queued" label. */
+.block.user.queued {
+  color: var(--muted);
+}
+
+.block.user.queued::after {
+  content: "  queued";
+  color: var(--faint);
+  font-weight: 400;
+}
+
 /* Reasoning and tool summaries are indented two spaces in the TUI. */
 .block.reasoning {
   color: var(--muted);
