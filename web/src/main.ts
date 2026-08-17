@@ -19,11 +19,13 @@ import { applyTheme, defaultTheme } from "./theme";
 import { THEMES } from "./themes";
 import { contextFill, gaugeText } from "./usage";
 import { applyRunStart, formatTitleModel, matchSlashCommands } from "./routing";
+import { createPromptQueue, submitIntent } from "./queue";
 
 let authToken = "";
 let currentProvider: string | undefined;
 let currentModel: string | undefined;
 let inFlight: AbortController | null = null;
+const promptQueue = createPromptQueue();
 let currentTheme = defaultTheme().name;
 let currentContextLabel = "";
 let currentContextWindow = 0;
@@ -90,7 +92,10 @@ function loadTranscript(): boolean {
   if (!Array.isArray(blocks) || blocks.length === 0) return false;
   for (const b of blocks) {
     const el = document.createElement("div");
-    el.className = b.className;
+    el.className = b.className
+      .split(/\s+/)
+      .filter((c) => c && c !== "queued")
+      .join(" ");
     el.innerHTML = b.html;
     transcript.appendChild(el);
   }
@@ -293,11 +298,15 @@ function switchConversation(name: string) {
     saveTranscript();
   }
   systemMessage(`Switched conversation to ${target}`);
+  if (!inFlight) drainQueue(target);
 }
 
-function setSendButtonStopping(stopping: boolean) {
-  sendBtn.textContent = stopping ? "Stop" : "Send";
-  sendBtn.classList.toggle("stopping", stopping);
+// Stop only when a turn is running and the box is empty. Typed text keeps
+// Send, so Enter can queue a follow-up instead of aborting.
+function updateSendButton() {
+  const stop = !!inFlight && promptInput.value.trim() === "";
+  sendBtn.textContent = stop ? "Stop" : "Send";
+  sendBtn.classList.toggle("stopping", stop);
 }
 
 function systemMessage(text: string) {
@@ -406,11 +415,13 @@ async function handleSlashCommand(text: string): Promise<boolean> {
         "  /auth [provider]      Store an API key for a provider\n" +
         "  /conversation [name]  Switch conversation (own session + history)\n" +
         "  /help                 Show available commands\n" +
-        "  /clear                Clear chat transcript",
+        "  /clear                Clear chat transcript\n" +
+        "  Enter during a turn   Queue a follow-up; Esc or empty Stop cancels",
     );
     return true;
   }
   if (text === "/clear") {
+    promptQueue.clear(activeConversation);
     transcript.replaceChildren();
     appendBlock("welcome").textContent = welcomeText;
     saveTranscript();
@@ -444,6 +455,7 @@ async function handleSlashCommand(text: string): Promise<boolean> {
       fail(err instanceof Error ? err.message : String(err));
       return true;
     }
+    promptQueue.clear(activeConversation);
     transcript.replaceChildren();
     appendBlock("welcome").textContent = welcomeText;
     setSession("");
@@ -770,6 +782,7 @@ function historyBack() {
     promptInput.value = inputHistory[historyIdx]!;
     autoGrow();
     updateHistoryIndicator();
+    updateSendButton();
   }
 }
 
@@ -779,6 +792,7 @@ function historyForward() {
   promptInput.value = historyIdx === inputHistory.length ? historyDraft : inputHistory[historyIdx]!;
   autoGrow();
   updateHistoryIndicator();
+  updateSendButton();
 }
 
 async function selectPaletteItem(i: number) {
@@ -787,6 +801,7 @@ async function selectPaletteItem(i: number) {
   if (!item) return;
   promptInput.value = "";
   autoGrow();
+  updateSendButton();
   await handleSlashCommand(item.value);
   promptInput.focus();
 }
@@ -905,35 +920,80 @@ function renderTurn(thinkingEl: HTMLElement | null): {
   return { onEvent, flush: repaint };
 }
 
-async function sendTurn() {
-  const prompt = promptInput.value.trim();
-  if (!prompt) return;
-  const conversation = activeConversation;
-
-  const userEl = appendBlock("user");
-  userEl.textContent = prompt;
-  saveTranscript();
-  promptInput.value = "";
-  autoGrow();
-  closePalette();
-
+function recordPrompt(prompt: string) {
   historyIndicator.hidden = true;
   if (!prompt.startsWith("/")) {
     inputHistory.push(prompt);
     historyIdx = inputHistory.length;
     historyDraft = "";
   }
+}
 
-  if (await handleSlashCommand(prompt)) return;
+function showQueuedPrompt(prompt: string) {
+  const el = appendBlock("user queued");
+  el.textContent = prompt;
+  saveTranscript();
+}
+
+function promoteQueuedPrompt() {
+  const el = transcript.querySelector(".block.user.queued");
+  el?.classList.remove("queued");
+  saveTranscript();
+}
+
+function drainQueue(conversation: string) {
+  if (inFlight) return;
+  if (activeConversation !== conversation) return;
+  const next = promptQueue.dequeue(conversation);
+  if (next) void sendTurn(next);
+}
+
+async function sendTurn(preset?: string) {
+  const fromInput = preset === undefined;
+  const prompt = (fromInput ? promptInput.value : preset).trim();
+  if (!prompt) return;
+  const conversation = activeConversation;
+
+  if (fromInput && inFlight) {
+    promptInput.value = "";
+    autoGrow();
+    closePalette();
+    updateSendButton();
+    if (prompt.startsWith("/")) {
+      if (await handleSlashCommand(prompt)) return;
+      return;
+    }
+    recordPrompt(prompt);
+    promptQueue.enqueue(conversation, prompt);
+    showQueuedPrompt(prompt);
+    return;
+  }
+
+  if (fromInput) {
+    const userEl = appendBlock("user");
+    userEl.textContent = prompt;
+    saveTranscript();
+    promptInput.value = "";
+    autoGrow();
+    closePalette();
+    recordPrompt(prompt);
+  } else {
+    promoteQueuedPrompt();
+  }
+
+  if (await handleSlashCommand(prompt)) {
+    drainQueue(conversation);
+    return;
+  }
 
   const thinkingEl = appendBlock("thinking");
   thinkingEl.textContent = "thinking…";
 
   const turn = renderTurn(thinkingEl);
-  // While a turn runs, Send becomes Stop. Aborting drops the connection,
-  // which cancels the turn in the container rather than just hiding it.
+  // Aborting drops the connection, which cancels the turn in the container
+  // rather than just hiding it. Enter with text no longer takes this path.
   inFlight = new AbortController();
-  setSendButtonStopping(true);
+  updateSendButton();
   setStatusWorking();
   try {
     const trailer = await streamTurn(
@@ -966,11 +1026,12 @@ async function sendTurn() {
     // Drop any armed Esc confirmation with the turn it belonged to, so a
     // stray second Esc cannot cancel whatever runs next.
     disarmCancelConfirm();
-    setSendButtonStopping(false);
+    updateSendButton();
     setStatusReady();
     thinkingEl.remove();
     saveTranscript();
     promptInput.focus();
+    drainQueue(activeConversation === conversation ? conversation : activeConversation);
   }
 }
 
@@ -1017,10 +1078,12 @@ async function main() {
 
   composer.addEventListener("submit", (e) => {
     e.preventDefault();
-    if (inFlight) {
-      inFlight.abort();
+    const intent = submitIntent(!!inFlight, promptInput.value);
+    if (intent === "stop") {
+      inFlight?.abort();
       return;
     }
+    if (intent === "ignore") return;
     void sendTurn();
   });
   // "change", not "input": switching on every keystroke would swap
@@ -1116,6 +1179,7 @@ async function main() {
   promptInput.addEventListener("input", () => {
     autoGrow();
     updatePalette();
+    updateSendButton();
     // Real typing only: history recall assigns .value directly, which does
     // not fire a native input event, so the badge survives a recall.
     historyIndicator.hidden = true;
