@@ -34,7 +34,7 @@ type Event struct {
 	PromptTokens     int `json:"promptTokens"`
 	CompletionTokens int `json:"completionTokens"`
 	TotalTokens      int `json:"totalTokens"`
-	Display       struct {
+	Display          struct {
 		Kind    string `json:"kind"`
 		Summary string `json:"summary"`
 	} `json:"display"`
