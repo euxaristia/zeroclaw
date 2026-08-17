@@ -24,21 +24,37 @@ type Item struct {
 	// Kept as a number rather than only inside Meta so callers can use it
 	// without parsing display text back apart.
 	ContextWindow int `json:"contextWindow,omitempty"`
+	// KeyAuth marks providers that authenticate with a plain API key, which
+	// the web UI's /auth flow can store. Local and custom-endpoint providers
+	// are excluded: they either need no key or need more than a key.
+	KeyAuth bool `json:"keyAuth,omitempty"`
 }
 
 // Providers lists the pickable model providers.
 func Providers() []Item {
 	return []Item{
-		{Group: "Providers", Label: "GitLawb OpenGateway", Value: "gitlawb-opengateway", Meta: "smart-routing gateway"},
-		{Group: "Providers", Label: "OpenRouter", Value: "openrouter", Meta: "multi-provider gateway"},
-		{Group: "Providers", Label: "Anthropic", Value: "anthropic", Meta: "Claude models"},
-		{Group: "Providers", Label: "OpenAI", Value: "openai", Meta: "GPT & o-series models"},
-		{Group: "Providers", Label: "DeepSeek", Value: "deepseek", Meta: "V4 Pro & Flash models"},
-		{Group: "Providers", Label: "Google AI", Value: "google", Meta: "Gemini models"},
+		{Group: "Providers", Label: "GitLawb OpenGateway", Value: "gitlawb-opengateway", Meta: "smart-routing gateway", KeyAuth: true},
+		{Group: "Providers", Label: "OpenRouter", Value: "openrouter", Meta: "multi-provider gateway", KeyAuth: true},
+		{Group: "Providers", Label: "Anthropic", Value: "anthropic", Meta: "Claude models", KeyAuth: true},
+		{Group: "Providers", Label: "OpenAI", Value: "openai", Meta: "GPT & o-series models", KeyAuth: true},
+		{Group: "Providers", Label: "DeepSeek", Value: "deepseek", Meta: "V4 Pro & Flash models", KeyAuth: true},
+		{Group: "Providers", Label: "Google AI", Value: "google", Meta: "Gemini models", KeyAuth: true},
 		{Group: "Providers", Label: "Ollama (Local)", Value: "ollama", Meta: "Local models"},
-		{Group: "Providers", Label: "AIMLAPI", Value: "aimlapi", Meta: "AI/ML API gateway"},
+		{Group: "Providers", Label: "AIMLAPI", Value: "aimlapi", Meta: "AI/ML API gateway", KeyAuth: true},
 		{Group: "Providers", Label: "Custom (OpenAI-compatible)", Value: "custom-openai-compatible", Meta: "Custom endpoint"},
 	}
+}
+
+// KeyedAuth reports whether provider accepts a plain API key via the web UI's
+// /auth flow. The daemon uses this to reject key capture for providers that
+// need no key (local) or need more than a key (custom endpoint + base URL).
+func KeyedAuth(provider string) bool {
+	for _, item := range Providers() {
+		if item.Value == provider {
+			return item.KeyAuth
+		}
+	}
+	return false
 }
 
 // LiveFetchSupported reports whether provider has a live model catalog

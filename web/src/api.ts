@@ -54,6 +54,9 @@ export interface CatalogItem {
   value: string;
   meta: string;
   provider: string;
+  // Present on /providers entries: true when the provider can take a plain
+  // API key via /auth.
+  keyAuth?: boolean;
 }
 
 const TOKEN_KEY = "zeroclaw_token";
@@ -116,6 +119,32 @@ export async function fetchModels(token: string, provider: string): Promise<Cata
   const resp = await fetch(url, { headers: authHeaders(token) });
   if (!resp.ok) throw new Error(`models request failed: ${resp.status}`);
   return resp.json();
+}
+
+// Provider names that already have a stored API key in the agent's zero
+// credential store.
+export async function fetchCredentials(token: string): Promise<string[]> {
+  const resp = await fetch("/credentials", { headers: authHeaders(token) });
+  if (!resp.ok) throw new Error(`credentials request failed: ${resp.status}`);
+  const data = (await resp.json()) as { providers?: string[] };
+  return data.providers ?? [];
+}
+
+export async function setCredential(token: string, provider: string, apiKey: string): Promise<void> {
+  const resp = await fetch(`/credentials/${encodeURIComponent(provider)}`, {
+    method: "PUT",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ apiKey }),
+  });
+  if (!resp.ok) throw new Error(`set credential failed: ${resp.status}`);
+}
+
+export async function deleteCredential(token: string, provider: string): Promise<void> {
+  const resp = await fetch(`/credentials/${encodeURIComponent(provider)}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  if (!resp.ok) throw new Error(`delete credential failed: ${resp.status}`);
 }
 
 export interface TurnOverrides {

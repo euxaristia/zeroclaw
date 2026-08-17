@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -172,6 +173,9 @@ func RunServer(agentNameOpt ...string) error {
 	mux.Handle("GET /conversations", s.auth(http.HandlerFunc(s.handleConversations)))
 	mux.Handle("GET /providers", s.auth(http.HandlerFunc(s.handleProviders)))
 	mux.Handle("GET /models", s.auth(http.HandlerFunc(s.handleModels)))
+	mux.Handle("GET /credentials", s.auth(http.HandlerFunc(s.handleCredentials)))
+	mux.Handle("PUT /credentials/{provider}", s.auth(http.HandlerFunc(s.handleSetCredential)))
+	mux.Handle("DELETE /credentials/{provider}", s.auth(http.HandlerFunc(s.handleDeleteCredential)))
 	mux.Handle("POST /turn", s.auth(http.HandlerFunc(s.handleTurn)))
 	mux.Handle("DELETE /conversations/{name}", s.auth(http.HandlerFunc(s.handleDeleteConversation)))
 	mux.Handle("POST /beat", s.auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -351,6 +355,60 @@ func (s *server) handleModels(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	_ = json.NewEncoder(w).Encode(catalog.StaticModels(provider))
+}
+
+// handleCredentials lists the providers with a stored API key, backing the
+// web UI's /auth provider picker status markers.
+func (s *server) handleCredentials(w http.ResponseWriter, r *http.Request) {
+	names, err := env.StoredAPIKeyProviders(s.agentName)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	_ = json.NewEncoder(w).Encode(map[string]any{"providers": names})
+}
+
+// handleSetCredential stores an API key for a provider, the web UI's
+// equivalent of zero's TUI "paste an API key" step. The key is written into
+// the agent's encrypted zero credential store, never logged or echoed back.
+func (s *server) handleSetCredential(w http.ResponseWriter, r *http.Request) {
+	provider := r.PathValue("provider")
+	if !catalog.KeyedAuth(provider) {
+		http.Error(w, "provider does not use an API key", http.StatusBadRequest)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+	var req struct {
+		APIKey string `json:"apiKey"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "bad credential request", http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(req.APIKey) == "" {
+		http.Error(w, "apiKey is required", http.StatusBadRequest)
+		return
+	}
+	if err := env.SetAPIKey(provider, req.APIKey, s.agentName); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleDeleteCredential removes a stored API key and clears its apiKeyStored
+// marker so the resolver stops consulting the store for that provider.
+func (s *server) handleDeleteCredential(w http.ResponseWriter, r *http.Request) {
+	provider := r.PathValue("provider")
+	if !catalog.KeyedAuth(provider) {
+		http.Error(w, "provider does not use an API key", http.StatusBadRequest)
+		return
+	}
+	if err := env.DeleteAPIKey(provider, s.agentName); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *server) handleTurn(w http.ResponseWriter, r *http.Request) {
