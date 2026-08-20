@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -317,5 +318,39 @@ func TestChunkMessage(t *testing.T) {
 	// Empty input yields no chunks, so callers never POST empty text.
 	if got := chunkMessage(""); got != nil {
 		t.Fatalf("empty input should yield nil, got %v", got)
+	}
+}
+
+// TestGetUpdatesBoundsBatchSize pins the limit query parameter. Without it
+// Telegram batches up to 100 updates, which can approach maxResponseBytes and
+// leave the poll loop retrying a truncated batch forever.
+func TestGetUpdatesBoundsBatchSize(t *testing.T) {
+	var mu sync.Mutex
+	var query string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		query = r.URL.RawQuery
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(getUpdatesResponse{OK: true})
+	}))
+	t.Cleanup(srv.Close)
+
+	ch := newTestChannel(srv.URL, &fakeBackend{})
+	if _, err := ch.getUpdates(context.Background(), 7); err != nil {
+		t.Fatalf("getUpdates: %v", err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	values, err := url.ParseQuery(query)
+	if err != nil {
+		t.Fatalf("parsing query %q: %v", query, err)
+	}
+	if got, want := values.Get("limit"), fmt.Sprint(maxUpdatesPerPoll); got != want {
+		t.Fatalf("limit = %q, want %q (query %q)", got, want, query)
+	}
+	if got := values.Get("offset"); got != "7" {
+		t.Fatalf("offset = %q, want \"7\"", got)
 	}
 }
