@@ -27,6 +27,18 @@ const telegramAPIBase = "https://api.telegram.org/bot"
 // connection open until an update arrives or this elapses.
 const defaultPollTimeout = 30 * time.Second
 
+// maxUpdatesPerPoll caps the batch getUpdates returns. Telegram defaults to
+// 100, which together with the 4096-unit message limit can approach
+// maxResponseBytes; halving the batch keeps a legitimate response well inside
+// that budget, so the read limit below can never truncate one.
+const maxUpdatesPerPoll = 50
+
+// maxResponseBytes bounds what we read from a Bot API response. Truncation is
+// not a recoverable state here (getUpdates only advances its offset after a
+// successful decode, so a truncated batch would be retried forever), which is
+// why maxUpdatesPerPoll keeps real responses far below this ceiling.
+const maxResponseBytes = 4 << 20
+
 // maxMessageUnits is Telegram's hard caption/message limit: 4096 UTF-16 code
 // units (https://core.telegram.org/bots/api#sendmessage). We chunk the agent's
 // reply at the rune level but budget by UTF-16 units, because astral-plane
@@ -152,7 +164,7 @@ func (c *Channel) getUpdates(ctx context.Context, offset int) (updates []update,
 	defer func() {
 		err = sanitizeError(err, c.token)
 	}()
-	url := fmt.Sprintf("%s/getUpdates?offset=%d&timeout=%d", c.baseURL, offset, int(defaultPollTimeout.Seconds()))
+	url := fmt.Sprintf("%s/getUpdates?offset=%d&timeout=%d&limit=%d", c.baseURL, offset, int(defaultPollTimeout.Seconds()), maxUpdatesPerPoll)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -162,7 +174,7 @@ func (c *Channel) getUpdates(ctx context.Context, offset int) (updates []update,
 		return nil, err
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +263,7 @@ func (c *Channel) sendOne(ctx context.Context, chatID, text string) (err error) 
 		return err
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		return err
 	}
