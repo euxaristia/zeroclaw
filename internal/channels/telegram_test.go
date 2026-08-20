@@ -3,6 +3,7 @@ package channels
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -352,5 +353,60 @@ func TestGetUpdatesBoundsBatchSize(t *testing.T) {
 	}
 	if got := values.Get("offset"); got != "7" {
 		t.Fatalf("offset = %q, want \"7\"", got)
+	}
+}
+
+// paddedJSON returns doc padded with trailing spaces to size bytes. The
+// padding is legal JSON whitespace, so a body built this way decodes cleanly
+// once truncated: only an explicit size check can reject it.
+func paddedJSON(doc string, size int) []byte {
+	body := make([]byte, size)
+	for i := range body {
+		body[i] = ' '
+	}
+	copy(body, doc)
+	return body
+}
+
+func jsonServer(t *testing.T, body []byte) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(body)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestBotAPIRejectsOversizedResponse(t *testing.T) {
+	tests := []struct {
+		name string
+		call func(*Channel) error
+	}{
+		{"getUpdates", func(c *Channel) error {
+			_, err := c.getUpdates(context.Background(), 0)
+			return err
+		}},
+		{"sendMessage", func(c *Channel) error {
+			return c.sendOne(context.Background(), "123", "hi")
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := jsonServer(t, paddedJSON(`{"ok":true,"result":[]}`, maxResponseBytes+1))
+			err := tt.call(newTestChannel(srv.URL, &fakeBackend{}))
+			if !errors.Is(err, errResponseTooLarge) {
+				t.Fatalf("err = %v, want %v", err, errResponseTooLarge)
+			}
+		})
+	}
+}
+
+// TestBotAPIAcceptsResponseAtLimit pins the boundary: maxResponseBytes is the
+// largest body we accept, not the first one we reject.
+func TestBotAPIAcceptsResponseAtLimit(t *testing.T) {
+	srv := jsonServer(t, paddedJSON(`{"ok":true,"result":[]}`, maxResponseBytes))
+	if _, err := newTestChannel(srv.URL, &fakeBackend{}).getUpdates(context.Background(), 0); err != nil {
+		t.Fatalf("getUpdates at the limit: %v", err)
 	}
 }

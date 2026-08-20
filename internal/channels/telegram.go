@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -36,8 +37,29 @@ const maxUpdatesPerPoll = 50
 // maxResponseBytes bounds what we read from a Bot API response. Truncation is
 // not a recoverable state here (getUpdates only advances its offset after a
 // successful decode, so a truncated batch would be retried forever), which is
-// why maxUpdatesPerPoll keeps real responses far below this ceiling.
+// why maxUpdatesPerPoll keeps real responses far below this ceiling and why
+// readBounded refuses an oversized body instead of returning a partial one.
 const maxResponseBytes = 4 << 20
+
+// errResponseTooLarge reports a Bot API response past maxResponseBytes. It is
+// named so the poll loop's log points at the real cause rather than at the
+// JSON decode error a truncated document would produce.
+var errResponseTooLarge = errors.New("response exceeds the size limit")
+
+// readBounded reads a response body up to maxResponseBytes. It reads one byte
+// past the limit so a body sitting exactly at the ceiling is still accepted
+// while anything larger fails loudly: io.LimitReader alone would hand back a
+// half-finished document with no error to distinguish it from a real one.
+func readBounded(r io.Reader) ([]byte, error) {
+	body, err := io.ReadAll(io.LimitReader(r, maxResponseBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > maxResponseBytes {
+		return nil, fmt.Errorf("%w of %d bytes", errResponseTooLarge, maxResponseBytes)
+	}
+	return body, nil
+}
 
 // maxMessageUnits is Telegram's hard caption/message limit: 4096 UTF-16 code
 // units (https://core.telegram.org/bots/api#sendmessage). We chunk the agent's
@@ -174,7 +196,7 @@ func (c *Channel) getUpdates(ctx context.Context, offset int) (updates []update,
 		return nil, err
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
+	body, err := readBounded(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -263,7 +285,7 @@ func (c *Channel) sendOne(ctx context.Context, chatID, text string) (err error) 
 		return err
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
+	body, err := readBounded(resp.Body)
 	if err != nil {
 		return err
 	}
