@@ -153,7 +153,7 @@ func getConversations(info daemon.Info) (map[string]string, error) {
 	defer resp.Body.Close()
 
 	var convs map[string]string
-	if err := json.NewDecoder(resp.Body).Decode(&convs); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&convs); err != nil {
 		return nil, err
 	}
 	return convs, nil

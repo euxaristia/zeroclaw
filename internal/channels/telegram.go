@@ -162,7 +162,7 @@ func (c *Channel) getUpdates(ctx context.Context, offset int) (updates []update,
 		return nil, err
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +251,7 @@ func (c *Channel) sendOne(ctx context.Context, chatID, text string) (err error) 
 		return err
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
 		return err
 	}
