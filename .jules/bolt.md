@@ -1,0 +1,3 @@
+## 2025-10-24 - Pre-allocate static lists for performance
+**Learning:** Re-creating constant, static lists inside functions like `catalog.Providers()` and `catalog.StaticModels()` allocates unnecessarily and stresses garbage collection, especially when these functions are called frequently (e.g. from web pickers). Iterating such lists to find a single property (`ContextWindowFor`) performs O(N) string matches when a pre-populated hash map accomplishes it in O(1).
+**Action:** Move static data out of function bodies to package-level variables and pre-compute O(1) lookup tables in `init()` when small, fixed sets of data need to be queried.
