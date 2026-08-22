@@ -69,10 +69,24 @@ func isLinuxAMD64(path string) bool {
 	return f.Machine == elf.EM_X86_64
 }
 
+func safeDockerEnv() []string {
+	env := []string{"DOCKER_CLI_HINTS=false"}
+	safeVars := []string{
+		"PATH", "HOME", "USER", "DOCKER_HOST", "DOCKER_CONTEXT",
+		"DOCKER_CERT_PATH", "DOCKER_TLS_VERIFY", "SystemRoot", "USERPROFILE",
+	}
+	for _, k := range safeVars {
+		if v, ok := os.LookupEnv(k); ok {
+			env = append(env, k+"="+v)
+		}
+	}
+	return env
+}
+
 func dockerCmd(ctx context.Context, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	hideConsole(cmd)
-	cmd.Env = append(os.Environ(), "DOCKER_CLI_HINTS=false")
+	cmd.Env = safeDockerEnv()
 	return cmd
 }
 
@@ -260,7 +274,7 @@ func InteractiveAuth(args []string, agent ...string) error {
 		zeroCmd = append([]string{"exec", execFlags, container, "zero", "auth"}, args...)
 	}
 	cmd := exec.Command("docker", zeroCmd...)
-	cmd.Env = append(os.Environ(), "DOCKER_CLI_HINTS=false")
+	cmd.Env = safeDockerEnv()
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
