@@ -3,6 +3,8 @@ package env
 import (
 	"archive/tar"
 	"bytes"
+	"debug/elf"
+	"encoding/binary"
 	"os"
 	"path/filepath"
 	"strings"
@@ -164,6 +166,62 @@ func TestExtractTarPermissionsMasking(t *testing.T) {
 
 			if info.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 {
 				t.Errorf("extracted entry mode %v has SUID/SGID/sticky bits, want masked", info.Mode())
+			}
+		})
+	}
+}
+
+// writeELF writes a minimal 64-bit little-endian ELF executable header for
+// machine, enough for debug/elf to parse the architecture.
+func writeELF(t *testing.T, path string, machine elf.Machine) {
+	t.Helper()
+	h := make([]byte, 64)
+	copy(h, []byte{0x7f, 'E', 'L', 'F'})
+	h[4] = byte(elf.ELFCLASS64)
+	h[5] = byte(elf.ELFDATA2LSB)
+	h[6] = byte(elf.EV_CURRENT)
+	binary.LittleEndian.PutUint16(h[16:], uint16(elf.ET_EXEC))
+	binary.LittleEndian.PutUint16(h[18:], uint16(machine))
+	binary.LittleEndian.PutUint32(h[20:], uint32(elf.EV_CURRENT))
+	binary.LittleEndian.PutUint16(h[52:], 64)
+	binary.LittleEndian.PutUint16(h[54:], 56)
+	binary.LittleEndian.PutUint16(h[58:], 64)
+	if err := os.WriteFile(path, h, 0o644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+func TestIsLinuxBinaryFor(t *testing.T) {
+	dir := t.TempDir()
+	amd64Bin := filepath.Join(dir, "zero-amd64")
+	arm64Bin := filepath.Join(dir, "zero-arm64")
+	writeELF(t, amd64Bin, elf.EM_X86_64)
+	writeELF(t, arm64Bin, elf.EM_AARCH64)
+
+	notELF := filepath.Join(dir, "not-elf")
+	if err := os.WriteFile(notELF, []byte("#!/bin/sh\n"), 0o644); err != nil {
+		t.Fatalf("write %s: %v", notELF, err)
+	}
+
+	cases := []struct {
+		name string
+		path string
+		arch string
+		want bool
+	}{
+		{"amd64 binary on amd64 engine", amd64Bin, "amd64", true},
+		{"arm64 binary on arm64 engine", arm64Bin, "arm64", true},
+		{"arm64 binary on amd64 engine", arm64Bin, "amd64", false},
+		{"amd64 binary on arm64 engine", amd64Bin, "arm64", false},
+		{"unsupported engine arch", amd64Bin, "riscv64", false},
+		{"empty engine arch", amd64Bin, "", false},
+		{"missing file", filepath.Join(dir, "absent"), "amd64", false},
+		{"not an ELF file", notELF, "amd64", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := isLinuxBinaryFor(c.path, c.arch); got != c.want {
+				t.Errorf("isLinuxBinaryFor(%q, %q) = %v, want %v", c.path, c.arch, got, c.want)
 			}
 		})
 	}

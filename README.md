@@ -62,10 +62,15 @@ Layered, hard boundary first:
 Requires Go 1.26+, Docker, and a sibling checkout of zero for the
 cross-compiled binary in the image.
 
+The image inherits the docker engine's architecture, so build zero for that
+same architecture: `arm64` on Apple Silicon, `amd64` on an Intel Mac, Windows,
+or a typical Linux host. `docker version --format '{{.Server.Arch}}'` prints
+it, and `zeroclaw doctor` checks the binary against it.
+
 ```
-# from the zero repo: build the linux binaries into zeroclaw's build context
-GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o ../zeroclaw/env/bin/zero ./cmd/zero
-GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o ../zeroclaw/env/bin/zero-linux-sandbox ./cmd/zero-linux-sandbox
+# from the zero repo: build the linux binary into zeroclaw's build context
+GOARCH="$(docker version --format '{{.Server.Arch}}')"
+GOOS=linux GOARCH="$GOARCH" CGO_ENABLED=0 go build -o ../zeroclaw/env/bin/zero ./cmd/zero
 
 # from this repo
 go build -o zeroclaw.exe ./cmd/zeroclaw   # zeroclaw on unix
