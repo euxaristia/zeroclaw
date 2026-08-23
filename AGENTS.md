@@ -181,8 +181,9 @@ host                                    container (zeroclaw-env)
   `zeroclawd` is the same binary relaunched with a `daemon run` subcommand, the
   way zero's internal/daemon launcher works. os/exec drives docker. Nothing
   imports zero's code; it stays an untouched sibling project consumed as a
-  binary inside the container image (cross-compiled for linux/amd64 into
-  `env/bin/zero`, which is untracked).
+  binary inside the container image (cross-compiled for the docker engine's
+  architecture, linux/amd64 or linux/arm64, into `env/bin/zero`, which is
+  untracked).
 - Dependencies: stdlib only on the Go side, and literally so: go.mod has
   no require block and there is no go.sum. Telegram long polling is plain
   net/http against the Bot API, so no bot library is needed. Any exception

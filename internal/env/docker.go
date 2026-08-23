@@ -60,13 +60,38 @@ func VolumeName(agent ...string) string {
 	return "zeroclaw-" + name + "-home"
 }
 
-func isLinuxAMD64(path string) bool {
+// elfMachines maps a Go architecture name to the ELF machine a Linux binary
+// for it carries. Only the architectures the image is built for are listed.
+var elfMachines = map[string]elf.Machine{
+	"amd64": elf.EM_X86_64,
+	"arm64": elf.EM_AARCH64,
+}
+
+// engineArch reports the architecture the docker engine runs containers with
+// ("amd64", "arm64"). Empty when docker cannot answer, which callers treat as
+// "cannot tell" rather than as a mismatch.
+func engineArch() string {
+	out, err := docker("version", "--format", "{{.Server.Arch}}")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(out)
+}
+
+// isLinuxBinaryFor reports whether path is a Linux ELF binary for arch. The
+// image inherits the engine's architecture, so a zero built for a different
+// one would land in the image and fail to exec on every turn.
+func isLinuxBinaryFor(path, arch string) bool {
+	want, ok := elfMachines[arch]
+	if !ok {
+		return false
+	}
 	f, err := elf.Open(path)
 	if err != nil {
 		return false
 	}
-	_ = f.Close()
-	return f.Machine == elf.EM_X86_64
+	defer func() { _ = f.Close() }()
+	return f.Machine == want
 }
 
 func dockerCmd(ctx context.Context, args ...string) *exec.Cmd {
@@ -529,7 +554,12 @@ func Doctor(w io.Writer, agent ...string) error {
 	check("env build context", err == nil, "run from the zeroclaw repo")
 	if err == nil {
 		zeroBin := filepath.Join(dir, "bin", "zero")
-		check("env/bin/zero (linux build)", isLinuxAMD64(zeroBin), "cross-compile zero for linux/amd64")
+		if arch := engineArch(); arch != "" {
+			check("env/bin/zero (linux/"+arch+" build)", isLinuxBinaryFor(zeroBin, arch),
+				"cross-compile zero for linux/"+arch)
+		} else {
+			check("env/bin/zero present", fileExists(zeroBin), "cross-compile zero into env/bin")
+		}
 	}
 	fmt.Fprintln(w, "note: running without hard isolation is not supported yet; docker is required (tier 3 fallback is an M4 item)")
 	return nil
