@@ -571,3 +571,8 @@ html, body {
   padding: 0.4rem 0.9rem;
   border-top: 1px solid var(--line);
 }
+
+#send-btn:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}

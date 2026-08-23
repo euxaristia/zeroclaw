@@ -18,11 +18,16 @@ export function openPicker(
 
     const box = document.createElement("div");
     box.className = "picker-box";
+    box.setAttribute("role", "dialog");
+    box.setAttribute("aria-modal", "true");
+    box.setAttribute("aria-label", title);
     overlay.appendChild(box);
 
     const titleEl = document.createElement("div");
     titleEl.className = "picker-title";
     titleEl.textContent = title;
+    titleEl.id = "picker-title-el";
+    box.setAttribute("aria-labelledby", "picker-title-el");
     box.appendChild(titleEl);
 
     const input = document.createElement("input");
@@ -30,10 +35,12 @@ export function openPicker(
     input.placeholder = "type to filter…";
     input.autocomplete = "off";
     input.spellcheck = false;
+    input.setAttribute("aria-label", "Filter options");
     box.appendChild(input);
 
     const list = document.createElement("div");
     list.className = "picker-list";
+    list.setAttribute("role", "listbox");
     box.appendChild(list);
 
     const hint = document.createElement("div");
@@ -62,6 +69,8 @@ export function openPicker(
         }
         const row = document.createElement("div");
         row.className = "picker-row" + (i === selected ? " selected" : "");
+        row.setAttribute("role", "option");
+        row.setAttribute("aria-selected", i === selected ? "true" : "false");
         const label = document.createElement("span");
         label.textContent = item.label;
         const meta = document.createElement("span");
