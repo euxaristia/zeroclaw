@@ -159,6 +159,9 @@ export function openPicker(
       if (filtered.length === 0) {
         const empty = document.createElement("div");
         empty.className = "picker-empty";
+        // Same reason as the group headers: a non-option child of the listbox
+        // would otherwise break the run of options a screen reader walks.
+        empty.setAttribute("role", "presentation");
         empty.textContent = "no matching items";
         list.appendChild(empty);
       }
