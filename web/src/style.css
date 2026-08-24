@@ -453,6 +453,15 @@ html, body {
   cursor: pointer;
 }
 
+#send-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+#send-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 #send-btn:disabled {
   opacity: 0.5;
   cursor: default;

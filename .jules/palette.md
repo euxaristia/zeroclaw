@@ -1,0 +1,3 @@
+## 2026-08-24 - Explicit ARIA Labels for Placeholders & Focus States
+**Learning:** Found that the main prompt `<textarea>` relied solely on a `placeholder` for context. This is an accessibility anti-pattern because the placeholder disappears on typing, and screen readers don't consistently announce it as a label. Also, the primary "Send" button lacked hover and focus-visible states, making it hard to see when focused via keyboard or hovered.
+**Action:** Always add an explicit `aria-label` to form fields that lack visible `<label>` tags (even if they have placeholders). Ensure all interactive elements like buttons have `:hover:not(:disabled)` and `:focus-visible` styles using the existing palette variables (e.g., `outline: 2px solid var(--accent)`).
