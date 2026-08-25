@@ -67,7 +67,7 @@ same architecture: `arm64` on Apple Silicon, `amd64` on an Intel Mac, Windows,
 or a typical Linux host. `docker version --format '{{.Server.Arch}}'` prints
 it, and `zeroclaw doctor` checks the binary against it.
 
-```
+```sh
 # from the zero repo: build the linux binary into zeroclaw's build context
 GOARCH="$(docker version --format '{{.Server.Arch}}')"
 GOOS=linux GOARCH="$GOARCH" CGO_ENABLED=0 go build -o ../zeroclaw/env/bin/zero ./cmd/zero
