@@ -30,91 +30,124 @@ type Item struct {
 	KeyAuth bool `json:"keyAuth,omitempty"`
 }
 
+var providers = []Item{
+	{Group: "Providers", Label: "GitLawb OpenGateway", Value: "gitlawb-opengateway", Meta: "smart-routing gateway", KeyAuth: true},
+	{Group: "Providers", Label: "OpenRouter", Value: "openrouter", Meta: "multi-provider gateway", KeyAuth: true},
+	{Group: "Providers", Label: "Anthropic", Value: "anthropic", Meta: "Claude models", KeyAuth: true},
+	{Group: "Providers", Label: "OpenAI", Value: "openai", Meta: "GPT & o-series models", KeyAuth: true},
+	{Group: "Providers", Label: "DeepSeek", Value: "deepseek", Meta: "V4 Pro & Flash models", KeyAuth: true},
+	{Group: "Providers", Label: "Google AI", Value: "google", Meta: "Gemini models", KeyAuth: true},
+	{Group: "Providers", Label: "Ollama (Local)", Value: "ollama", Meta: "Local models"},
+	{Group: "Providers", Label: "AIMLAPI", Value: "aimlapi", Meta: "AI/ML API gateway", KeyAuth: true},
+	{Group: "Providers", Label: "Custom (OpenAI-compatible)", Value: "custom-openai-compatible", Meta: "Custom endpoint"},
+}
+
 // Providers lists the pickable model providers.
 func Providers() []Item {
-	return []Item{
-		{Group: "Providers", Label: "GitLawb OpenGateway", Value: "gitlawb-opengateway", Meta: "smart-routing gateway", KeyAuth: true},
-		{Group: "Providers", Label: "OpenRouter", Value: "openrouter", Meta: "multi-provider gateway", KeyAuth: true},
-		{Group: "Providers", Label: "Anthropic", Value: "anthropic", Meta: "Claude models", KeyAuth: true},
-		{Group: "Providers", Label: "OpenAI", Value: "openai", Meta: "GPT & o-series models", KeyAuth: true},
-		{Group: "Providers", Label: "DeepSeek", Value: "deepseek", Meta: "V4 Pro & Flash models", KeyAuth: true},
-		{Group: "Providers", Label: "Google AI", Value: "google", Meta: "Gemini models", KeyAuth: true},
-		{Group: "Providers", Label: "Ollama (Local)", Value: "ollama", Meta: "Local models"},
-		{Group: "Providers", Label: "AIMLAPI", Value: "aimlapi", Meta: "AI/ML API gateway", KeyAuth: true},
-		{Group: "Providers", Label: "Custom (OpenAI-compatible)", Value: "custom-openai-compatible", Meta: "Custom endpoint"},
-	}
+	return providers
 }
 
 // KeyedAuth reports whether provider accepts a plain API key via the web UI's
 // /auth flow. The daemon uses this to reject key capture for providers that
 // need no key (local) or need more than a key (custom endpoint + base URL).
 func KeyedAuth(provider string) bool {
-	for _, item := range Providers() {
-		if item.Value == provider {
-			return item.KeyAuth
-		}
-	}
-	return false
+	// Optimization: O(1) map lookup instead of O(N) iteration
+	return keyedAuthMap[strings.ToLower(provider)]
 }
 
 // LiveFetchSupported reports whether provider has a live model catalog
 // endpoint (as opposed to only the curated static list below).
 func LiveFetchSupported(provider string) bool {
-	return provider == "gitlawb-opengateway" || provider == "openrouter"
+	// Optimization: strings.EqualFold is faster and allocates less than map lookup + ToLower
+	return strings.EqualFold(provider, "gitlawb-opengateway") || strings.EqualFold(provider, "openrouter")
 }
 
 // StaticModels returns the curated model list, optionally filtered to one
 // provider. An empty provider returns everything.
-func StaticModels(provider string) []Item {
-	all := []Item{
-		{Group: "GitLawb OpenGateway", Label: "NVIDIA Nemotron 3 Ultra 550B (Free)", Value: "nvidia/nemotron-3-ultra-550b-a55b:free", Meta: "128K ctx · free", Provider: "gitlawb-opengateway", ContextWindow: 128000},
-		{Group: "GitLawb OpenGateway", Label: "Mimo v2.5 Pro", Value: "mimo-v2.5-pro", Meta: "128K ctx · smart-route", Provider: "gitlawb-opengateway", ContextWindow: 128000},
-		{Group: "GitLawb OpenGateway", Label: "Qwen 3 Coder 480B", Value: "qwen3-coder:480b", Meta: "128K ctx · code", Provider: "gitlawb-opengateway", ContextWindow: 128000},
+var staticModels = []Item{
+	{Group: "GitLawb OpenGateway", Label: "NVIDIA Nemotron 3 Ultra 550B (Free)", Value: "nvidia/nemotron-3-ultra-550b-a55b:free", Meta: "128K ctx · free", Provider: "gitlawb-opengateway", ContextWindow: 128000},
+	{Group: "GitLawb OpenGateway", Label: "Mimo v2.5 Pro", Value: "mimo-v2.5-pro", Meta: "128K ctx · smart-route", Provider: "gitlawb-opengateway", ContextWindow: 128000},
+	{Group: "GitLawb OpenGateway", Label: "Qwen 3 Coder 480B", Value: "qwen3-coder:480b", Meta: "128K ctx · code", Provider: "gitlawb-opengateway", ContextWindow: 128000},
 
-		{Group: "OpenRouter", Label: "DeepSeek V4 Pro", Value: "deepseek/deepseek-v4-pro", Meta: "1M ctx · tools", Provider: "openrouter", ContextWindow: 1000000},
-		{Group: "OpenRouter", Label: "DeepSeek V4 Flash", Value: "deepseek/deepseek-v4-flash-0731", Meta: "1M ctx · fast · tools", Provider: "openrouter", ContextWindow: 1000000},
-		{Group: "OpenRouter", Label: "Claude Sonnet 4.5", Value: "anthropic/claude-sonnet-4.5", Meta: "200K ctx · tools · vision", Provider: "openrouter", ContextWindow: 200000},
-		{Group: "OpenRouter", Label: "Claude Haiku 4.5", Value: "anthropic/claude-haiku-4.5", Meta: "200K ctx · fast · tools", Provider: "openrouter", ContextWindow: 200000},
-		{Group: "OpenRouter", Label: "Gemini 2.5 Flash", Value: "google/gemini-2.5-flash", Meta: "1M ctx · fast · vision", Provider: "openrouter", ContextWindow: 1000000},
-		{Group: "OpenRouter", Label: "Gemini 2.5 Pro", Value: "google/gemini-2.5-pro", Meta: "1M ctx · reasoning · vision", Provider: "openrouter", ContextWindow: 1000000},
-		{Group: "OpenRouter", Label: "GPT-4.1", Value: "openai/gpt-4.1", Meta: "1M ctx · tools · vision", Provider: "openrouter", ContextWindow: 1000000},
-		{Group: "OpenRouter", Label: "GPT-4.1 Mini", Value: "openai/gpt-4.1-mini", Meta: "1M ctx · fast · tools", Provider: "openrouter", ContextWindow: 1000000},
-		{Group: "OpenRouter", Label: "o3-mini", Value: "openai/o3-mini", Meta: "200K ctx · reasoning", Provider: "openrouter", ContextWindow: 200000},
-		{Group: "OpenRouter", Label: "Llama 3.3 70B Instruct", Value: "meta-llama/llama-3.3-70b-instruct", Meta: "128K ctx · tools", Provider: "openrouter", ContextWindow: 128000},
+	{Group: "OpenRouter", Label: "DeepSeek V4 Pro", Value: "deepseek/deepseek-v4-pro", Meta: "1M ctx · tools", Provider: "openrouter", ContextWindow: 1000000},
+	{Group: "OpenRouter", Label: "DeepSeek V4 Flash", Value: "deepseek/deepseek-v4-flash-0731", Meta: "1M ctx · fast · tools", Provider: "openrouter", ContextWindow: 1000000},
+	{Group: "OpenRouter", Label: "Claude Sonnet 4.5", Value: "anthropic/claude-sonnet-4.5", Meta: "200K ctx · tools · vision", Provider: "openrouter", ContextWindow: 200000},
+	{Group: "OpenRouter", Label: "Claude Haiku 4.5", Value: "anthropic/claude-haiku-4.5", Meta: "200K ctx · fast · tools", Provider: "openrouter", ContextWindow: 200000},
+	{Group: "OpenRouter", Label: "Gemini 2.5 Flash", Value: "google/gemini-2.5-flash", Meta: "1M ctx · fast · vision", Provider: "openrouter", ContextWindow: 1000000},
+	{Group: "OpenRouter", Label: "Gemini 2.5 Pro", Value: "google/gemini-2.5-pro", Meta: "1M ctx · reasoning · vision", Provider: "openrouter", ContextWindow: 1000000},
+	{Group: "OpenRouter", Label: "GPT-4.1", Value: "openai/gpt-4.1", Meta: "1M ctx · tools · vision", Provider: "openrouter", ContextWindow: 1000000},
+	{Group: "OpenRouter", Label: "GPT-4.1 Mini", Value: "openai/gpt-4.1-mini", Meta: "1M ctx · fast · tools", Provider: "openrouter", ContextWindow: 1000000},
+	{Group: "OpenRouter", Label: "o3-mini", Value: "openai/o3-mini", Meta: "200K ctx · reasoning", Provider: "openrouter", ContextWindow: 200000},
+	{Group: "OpenRouter", Label: "Llama 3.3 70B Instruct", Value: "meta-llama/llama-3.3-70b-instruct", Meta: "128K ctx · tools", Provider: "openrouter", ContextWindow: 128000},
 
-		{Group: "Anthropic", Label: "Claude Sonnet 4.5", Value: "claude-sonnet-4.5", Meta: "200K ctx · tools · vision", Provider: "anthropic", ContextWindow: 200000},
-		{Group: "Anthropic", Label: "Claude Haiku 4.5", Value: "claude-haiku-4.5", Meta: "200K ctx · fast · tools", Provider: "anthropic", ContextWindow: 200000},
-		{Group: "Anthropic", Label: "Claude Opus 4.1", Value: "claude-opus-4.1", Meta: "200K ctx · reasoning", Provider: "anthropic", ContextWindow: 200000},
+	{Group: "Anthropic", Label: "Claude Sonnet 4.5", Value: "claude-sonnet-4.5", Meta: "200K ctx · tools · vision", Provider: "anthropic", ContextWindow: 200000},
+	{Group: "Anthropic", Label: "Claude Haiku 4.5", Value: "claude-haiku-4.5", Meta: "200K ctx · fast · tools", Provider: "anthropic", ContextWindow: 200000},
+	{Group: "Anthropic", Label: "Claude Opus 4.1", Value: "claude-opus-4.1", Meta: "200K ctx · reasoning", Provider: "anthropic", ContextWindow: 200000},
 
-		{Group: "OpenAI", Label: "GPT-4.1", Value: "gpt-4.1", Meta: "1M ctx · tools · vision", Provider: "openai", ContextWindow: 1000000},
-		{Group: "OpenAI", Label: "GPT-4.1 Mini", Value: "gpt-4.1-mini", Meta: "1M ctx · fast · tools", Provider: "openai", ContextWindow: 1000000},
-		{Group: "OpenAI", Label: "GPT-4.1 Nano", Value: "gpt-4.1-nano", Meta: "1M ctx · fast · lightweight", Provider: "openai", ContextWindow: 1000000},
-		{Group: "OpenAI", Label: "o3-mini", Value: "o3-mini", Meta: "200K ctx · reasoning", Provider: "openai", ContextWindow: 200000},
-		{Group: "OpenAI", Label: "o1", Value: "o1", Meta: "200K ctx · reasoning", Provider: "openai", ContextWindow: 200000},
-		{Group: "OpenAI", Label: "GPT-4o", Value: "gpt-4o", Meta: "128K ctx · tools · vision", Provider: "openai", ContextWindow: 128000},
-		{Group: "OpenAI", Label: "GPT-4o Mini", Value: "gpt-4o-mini", Meta: "128K ctx · fast · tools", Provider: "openai", ContextWindow: 128000},
+	{Group: "OpenAI", Label: "GPT-4.1", Value: "gpt-4.1", Meta: "1M ctx · tools · vision", Provider: "openai", ContextWindow: 1000000},
+	{Group: "OpenAI", Label: "GPT-4.1 Mini", Value: "gpt-4.1-mini", Meta: "1M ctx · fast · tools", Provider: "openai", ContextWindow: 1000000},
+	{Group: "OpenAI", Label: "GPT-4.1 Nano", Value: "gpt-4.1-nano", Meta: "1M ctx · fast · lightweight", Provider: "openai", ContextWindow: 1000000},
+	{Group: "OpenAI", Label: "o3-mini", Value: "o3-mini", Meta: "200K ctx · reasoning", Provider: "openai", ContextWindow: 200000},
+	{Group: "OpenAI", Label: "o1", Value: "o1", Meta: "200K ctx · reasoning", Provider: "openai", ContextWindow: 200000},
+	{Group: "OpenAI", Label: "GPT-4o", Value: "gpt-4o", Meta: "128K ctx · tools · vision", Provider: "openai", ContextWindow: 128000},
+	{Group: "OpenAI", Label: "GPT-4o Mini", Value: "gpt-4o-mini", Meta: "128K ctx · fast · tools", Provider: "openai", ContextWindow: 128000},
 
-		{Group: "DeepSeek", Label: "DeepSeek V4 Pro", Value: "deepseek-chat", Meta: "1M ctx · tools", Provider: "deepseek", ContextWindow: 1000000},
-		{Group: "DeepSeek", Label: "DeepSeek V4 Flash", Value: "deepseek-reasoner", Meta: "1M ctx · fast · reasoning", Provider: "deepseek", ContextWindow: 1000000},
+	{Group: "DeepSeek", Label: "DeepSeek V4 Pro", Value: "deepseek-chat", Meta: "1M ctx · tools", Provider: "deepseek", ContextWindow: 1000000},
+	{Group: "DeepSeek", Label: "DeepSeek V4 Flash", Value: "deepseek-reasoner", Meta: "1M ctx · fast · reasoning", Provider: "deepseek", ContextWindow: 1000000},
 
-		{Group: "Google AI", Label: "Gemini 2.5 Flash", Value: "gemini-2.5-flash", Meta: "1M ctx · fast · vision", Provider: "google", ContextWindow: 1000000},
-		{Group: "Google AI", Label: "Gemini 2.5 Pro", Value: "gemini-2.5-pro", Meta: "1M ctx · reasoning · vision", Provider: "google", ContextWindow: 1000000},
-		{Group: "Google AI", Label: "Gemini 2.5 Flash-Lite", Value: "gemini-2.5-flash-lite", Meta: "1M ctx · fast · lightweight", Provider: "google", ContextWindow: 1000000},
+	{Group: "Google AI", Label: "Gemini 2.5 Flash", Value: "gemini-2.5-flash", Meta: "1M ctx · fast · vision", Provider: "google", ContextWindow: 1000000},
+	{Group: "Google AI", Label: "Gemini 2.5 Pro", Value: "gemini-2.5-pro", Meta: "1M ctx · reasoning · vision", Provider: "google", ContextWindow: 1000000},
+	{Group: "Google AI", Label: "Gemini 2.5 Flash-Lite", Value: "gemini-2.5-flash-lite", Meta: "1M ctx · fast · lightweight", Provider: "google", ContextWindow: 1000000},
 
-		{Group: "Ollama (Local)", Label: "Llama 3.3 70B", Value: "llama3.3", Meta: "local", Provider: "ollama"},
-		{Group: "Ollama (Local)", Label: "Qwen 2.5 Coder 32B", Value: "qwen2.5-coder", Meta: "local · code", Provider: "ollama"},
-		{Group: "Ollama (Local)", Label: "DeepSeek R1 Distill 32B", Value: "deepseek-r1", Meta: "local · reasoning", Provider: "ollama"},
+	{Group: "Ollama (Local)", Label: "Llama 3.3 70B", Value: "llama3.3", Meta: "local", Provider: "ollama"},
+	{Group: "Ollama (Local)", Label: "Qwen 2.5 Coder 32B", Value: "qwen2.5-coder", Meta: "local · code", Provider: "ollama"},
+	{Group: "Ollama (Local)", Label: "DeepSeek R1 Distill 32B", Value: "deepseek-r1", Meta: "local · reasoning", Provider: "ollama"},
+}
+
+var (
+	modelsByProvider map[string][]Item
+	contextWindows   map[string]int
+	keyedAuthMap     map[string]bool
+)
+
+func init() {
+	modelsByProvider = make(map[string][]Item)
+	contextWindows = make(map[string]int)
+
+	// Pre-allocate map slice capacities
+	counts := make(map[string]int)
+	for i := range staticModels {
+		counts[strings.ToLower(staticModels[i].Provider)]++
 	}
-	if provider == "" {
-		return all
+
+	for k, v := range counts {
+		modelsByProvider[k] = make([]Item, 0, v)
 	}
-	var filtered []Item
-	for _, item := range all {
-		if strings.EqualFold(item.Provider, provider) {
-			filtered = append(filtered, item)
+
+	for i := range staticModels {
+		item := staticModels[i]
+		lowerProvider := strings.ToLower(item.Provider)
+		modelsByProvider[lowerProvider] = append(modelsByProvider[lowerProvider], item)
+
+		lowerValue := strings.ToLower(item.Value)
+		contextWindows[lowerValue] = item.ContextWindow
+	}
+
+	keyedAuthMap = make(map[string]bool, len(providers))
+	for i := range providers {
+		if providers[i].KeyAuth {
+			keyedAuthMap[strings.ToLower(providers[i].Value)] = true
 		}
 	}
-	return filtered
+
+}
+
+func StaticModels(provider string) []Item {
+	if provider == "" {
+		return staticModels
+	}
+	// Optimization: O(1) map lookup instead of O(N) iteration
+	return modelsByProvider[strings.ToLower(provider)]
 }
 
 // ContextWindowFor reports the curated context size for a model id, or 0
@@ -125,12 +158,8 @@ func ContextWindowFor(model string) int {
 	if model == "" {
 		return 0
 	}
-	for _, item := range StaticModels("") {
-		if strings.EqualFold(item.Value, model) {
-			return item.ContextWindow
-		}
-	}
-	return 0
+	// Optimization: O(1) map lookup instead of O(N) iteration
+	return contextWindows[strings.ToLower(model)]
 }
 
 // FormatContextWindow renders a token count the way the pickers do
