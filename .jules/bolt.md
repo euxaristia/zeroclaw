@@ -1,0 +1,3 @@
+## 2025-05-18 - [Batching DOM updates and expensive operations in SSE stream handlers]
+**Learning:** Un-batched synchronous DOM reads and writes (like reading `scrollHeight` and performing a full `innerHTML` serialize/save) in a high-frequency SSE stream handler can cause severe layout thrashing and block the main thread, leading to a sluggish UI during text generation.
+**Action:** When handling streaming deltas, always batch heavy read/write operations (like `scrollTop = scrollHeight` and saving state to `sessionStorage`) along with DOM mutations inside the existing debounced function (e.g., via `requestAnimationFrame`). Only do synchronous layout calculations when strictly necessary outside the high-frequency stream loop.

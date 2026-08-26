@@ -834,9 +834,11 @@ function renderTurn(thinkingEl: HTMLElement | null): {
   let repaintQueued = false;
   const repaint = () => {
     repaintQueued = false;
-    if (!textEl) return;
-    textEl.replaceChildren(renderMarkdown(markdownSrc));
+    if (textEl) {
+      textEl.replaceChildren(renderMarkdown(markdownSrc));
+    }
     transcript.scrollTop = transcript.scrollHeight;
+    saveTranscript();
   };
   const queueRepaint = () => {
     if (repaintQueued) return;
@@ -910,8 +912,10 @@ function renderTurn(thinkingEl: HTMLElement | null): {
         break;
     }
     lastType = ev.type;
-    transcript.scrollTop = transcript.scrollHeight;
-    saveTranscript();
+    if (ev.type !== "text") {
+      transcript.scrollTop = transcript.scrollHeight;
+      saveTranscript();
+    }
   };
 
   // flush forces any frame-deferred markdown repaint to land now, so the
