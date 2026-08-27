@@ -834,9 +834,13 @@ function renderTurn(thinkingEl: HTMLElement | null): {
   let repaintQueued = false;
   const repaint = () => {
     repaintQueued = false;
-    if (!textEl) return;
-    textEl.replaceChildren(renderMarkdown(markdownSrc));
+    if (textEl) {
+      textEl.replaceChildren(renderMarkdown(markdownSrc));
+    }
+    // Bolt: Batched DOM read/writes inside requestAnimationFrame to prevent layout thrashing
+    // and expensive serialization on every SSE token event.
     transcript.scrollTop = transcript.scrollHeight;
+    saveTranscript();
   };
   const queueRepaint = () => {
     if (repaintQueued) return;
@@ -881,7 +885,6 @@ function renderTurn(thinkingEl: HTMLElement | null): {
           markdownSrc = "";
         }
         markdownSrc += ev.delta;
-        queueRepaint();
         break;
       case "tool_call": {
         clearThinking();
@@ -910,8 +913,7 @@ function renderTurn(thinkingEl: HTMLElement | null): {
         break;
     }
     lastType = ev.type;
-    transcript.scrollTop = transcript.scrollHeight;
-    saveTranscript();
+    queueRepaint();
   };
 
   // flush forces any frame-deferred markdown repaint to land now, so the
