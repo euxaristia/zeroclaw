@@ -6,6 +6,7 @@ import {
   matchSlashCommands,
   planConversationItems,
   planConversations,
+  planNextConversation,
 } from "./routing";
 
 test("/auth is a first-class palette command", () => {
@@ -61,5 +62,23 @@ test("planConversationItems prepends + New conversation action", () => {
   expect(items[0].value).toBe("__new__");
   expect(items[0].group).toBe("Actions");
   expect(items.some((i) => i.value === "main" && i.group === "Conversations")).toBe(true);
+});
+
+test("planNextConversation selects next adjacent conversation in place", () => {
+  const names = ["main", "fresh-recall", "heartbeat", "usageprobe", "usageprobe2", "usageprobe4"];
+  expect(planNextConversation(names, "usageprobe2")).toBe("usageprobe4");
+  expect(planNextConversation(names, "heartbeat")).toBe("usageprobe");
+  expect(planNextConversation(names, "main")).toBe("fresh-recall");
+});
+
+test("planNextConversation selects preceding conversation when last item deleted", () => {
+  const names = ["main", "fresh-recall", "heartbeat", "usageprobe", "usageprobe2", "usageprobe4"];
+  expect(planNextConversation(names, "usageprobe4")).toBe("usageprobe2");
+});
+
+test("planNextConversation falls back to main when unknown or only item", () => {
+  expect(planNextConversation(["main"], "main")).toBe("main");
+  expect(planNextConversation(["main", "draft"], "unknown")).toBe("main");
+  expect(planNextConversation([], "anything")).toBe("main");
 });
 

@@ -24,6 +24,7 @@ import {
   matchSlashCommands,
   planConversations,
   planConversationItems,
+  planNextConversation,
 } from "./routing";
 import { createPromptQueue, submitIntent } from "./queue";
 
@@ -375,26 +376,29 @@ async function deleteConversation(name: string) {
   } catch {
     // ignore
   }
+  const current = planConversations(cachedConversations, getLocalConversationNames(), activeConversation);
+  const next = planNextConversation(current.map((e) => e.name), name);
   sessionStorage.removeItem(`${TRANSCRIPT_KEY}:${name}`);
   delete cachedConversations[name];
+  promptQueue.clear(name);
   if (activeConversation === name) {
-    switchConversation("main");
-  } else {
-    renderSidebar();
+    switchConversation(next, false);
+    return;
   }
+  renderSidebar();
 }
 
 // switchConversation swaps which zero session turns go to. The outgoing
 // transcript is saved and the incoming one restored, so each conversation
 // keeps its own visible history.
-function switchConversation(name: string) {
+function switchConversation(name: string, saveCurrent = true) {
   const target = name.trim() || "main";
   if (target === activeConversation) {
     convLabel.textContent = target;
     renderSidebar();
     return;
   }
-  saveTranscript();
+  if (saveCurrent) saveTranscript();
   activeConversation = target;
   convLabel.textContent = target;
   saveUIState();

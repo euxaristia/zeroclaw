@@ -86,6 +86,15 @@ export function planConversations(
   });
 }
 
+// planNextConversation selects the adjacent conversation when deleting an active thread.
+export function planNextConversation(names: string[], deleted: string) {
+  const idx = names.indexOf(deleted);
+  if (idx === -1) return "main";
+  const remaining = names.filter((n) => n !== deleted);
+  if (remaining.length === 0) return "main";
+  return idx < remaining.length ? remaining[idx] : remaining[remaining.length - 1];
+}
+
 // planConversationItems builds catalog items for the /conversation picker.
 export function planConversationItems(
   existing: Record<string, string> = {},
