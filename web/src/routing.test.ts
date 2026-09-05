@@ -1,5 +1,12 @@
 import { expect, test } from "bun:test";
-import { applyRunStart, COMMANDS, formatTitleModel, matchSlashCommands } from "./routing";
+import {
+  applyRunStart,
+  COMMANDS,
+  formatTitleModel,
+  matchSlashCommands,
+  planConversationItems,
+  planConversations,
+} from "./routing";
 
 test("/auth is a first-class palette command", () => {
   expect(COMMANDS.some((c) => c.value === "/auth")).toBe(true);
@@ -36,3 +43,23 @@ test("title bar does not glue profile and slashed model ids together", () => {
   );
   expect(formatTitleModel("", "")).toBe("no provider");
 });
+
+test("planConversations highlights active conversation in place without moving to first position", () => {
+  const convs = planConversations({ main: "sess-1", refactor: "sess-2" }, ["draft"], "refactor");
+  expect(convs[0].name).toBe("main");
+  expect(convs.map((c) => c.name)).toEqual(["main", "draft", "refactor"]);
+  const refactor = convs.find((c) => c.name === "refactor");
+  expect(refactor?.isCurrent).toBe(true);
+  expect(refactor?.meta).toBe("current · session sess-2");
+  expect(convs.find((c) => c.name === "main")?.isCurrent).toBe(false);
+  expect(convs.find((c) => c.name === "main")?.meta).toBe("session sess-1");
+  expect(convs.find((c) => c.name === "draft")?.meta).toBe("local");
+});
+
+test("planConversationItems prepends + New conversation action", () => {
+  const items = planConversationItems({ main: "sess-1" }, [], "main");
+  expect(items[0].value).toBe("__new__");
+  expect(items[0].group).toBe("Actions");
+  expect(items.some((i) => i.value === "main" && i.group === "Conversations")).toBe(true);
+});
+

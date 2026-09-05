@@ -45,6 +45,77 @@ export function applyRunStart(current: RouteState, ev: RouteState): RouteState {
   return { provider: current.provider, model };
 }
 
+export type ConversationEntry = {
+  name: string;
+  sessionId?: string;
+  isCurrent: boolean;
+  meta: string;
+};
+
+// planConversations builds the structured list for the conversation sidebar and picker.
+export function planConversations(
+  existing: Record<string, string> = {},
+  localNames: string[] = [],
+  active = "main",
+): ConversationEntry[] {
+  const names = new Set<string>();
+  if (active) names.add(active);
+  names.add("main");
+  Object.keys(existing).forEach((k) => names.add(k));
+  localNames.forEach((k) => {
+    if (k.trim()) names.add(k.trim());
+  });
+
+  const sorted = Array.from(names).sort((a, b) => {
+    if (a === "main") return -1;
+    if (b === "main") return 1;
+    return a.localeCompare(b);
+  });
+
+  return sorted.map((name) => {
+    const sessionId = existing[name];
+    const isCurrent = name === active;
+    const meta = isCurrent
+      ? sessionId
+        ? `current · session ${sessionId}`
+        : "current"
+      : sessionId
+        ? `session ${sessionId}`
+        : "local";
+    return { name, sessionId, isCurrent, meta };
+  });
+}
+
+// planConversationItems builds catalog items for the /conversation picker.
+export function planConversationItems(
+  existing: Record<string, string> = {},
+  localNames: string[] = [],
+  active = "main",
+): CatalogItem[] {
+  const convs = planConversations(existing, localNames, active);
+  const items: CatalogItem[] = [
+    {
+      group: "Actions",
+      label: "+ New conversation",
+      value: "__new__",
+      meta: "Start a fresh conversation thread",
+      provider: "",
+    },
+  ];
+
+  convs.forEach((c) => {
+    items.push({
+      group: "Conversations",
+      label: c.name,
+      value: c.name,
+      meta: c.meta,
+      provider: "",
+    });
+  });
+
+  return items;
+}
+
 // formatTitleModel is the title-bar "who is answering" string. A slash
 // between the two is how openai + nvidia/nemotron... read as one OpenRouter
 // model id; the middle dot keeps the profile and the model id apart.
@@ -55,3 +126,7 @@ export function formatTitleModel(provider?: string, model?: string): string {
   if (p && m) return `${p} · ${m}`;
   return m || p;
 }
+
+
+
+

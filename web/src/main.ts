@@ -18,7 +18,13 @@ import { renderMarkdown } from "./markdown";
 import { applyTheme, defaultTheme } from "./theme";
 import { THEMES } from "./themes";
 import { contextFill, gaugeText } from "./usage";
-import { applyRunStart, formatTitleModel, matchSlashCommands } from "./routing";
+import {
+  applyRunStart,
+  formatTitleModel,
+  matchSlashCommands,
+  planConversations,
+  planConversationItems,
+} from "./routing";
 import { createPromptQueue, submitIntent } from "./queue";
 
 let authToken = "";
@@ -59,9 +65,7 @@ const STATE_KEY = "zeroclaw_ui_state";
 // zero session on the daemon, so showing one conversation's history while
 // another is selected would misrepresent what the agent actually remembers.
 // activeConversation is the single source of truth for which conversation
-// is selected. Reading it back off the input element instead would go stale
-// the moment a switch happens through a path that doesn't touch the input
-// (the /conversation picker), and transcripts would save under the wrong key.
+// is selected.
 let activeConversation = "main";
 
 function transcriptKey(conversation = activeConversation): string {
@@ -133,7 +137,7 @@ function loadUIState() {
     currentProvider = state.provider;
     if (state.conversation) {
       activeConversation = state.conversation;
-      convInput.value = state.conversation;
+      convLabel.textContent = state.conversation;
     }
     if (state.theme) currentTheme = state.theme;
     currentEffort = state.effort;
@@ -144,7 +148,11 @@ function loadUIState() {
 }
 
 const transcript = document.getElementById("transcript") as HTMLDivElement;
-const convInput = document.getElementById("conv-input") as HTMLInputElement;
+const convLabel = document.getElementById("conv-label") as HTMLSpanElement;
+const sidebarToggle = document.getElementById("sidebar-toggle") as HTMLButtonElement;
+const sidebar = document.getElementById("sidebar") as HTMLElement;
+const newConvBtn = document.getElementById("new-conv-btn") as HTMLButtonElement;
+const convList = document.getElementById("conv-list") as HTMLDivElement;
 const composer = document.getElementById("composer") as HTMLFormElement;
 const promptInput = document.getElementById("prompt-input") as HTMLTextAreaElement;
 const sendBtn = document.getElementById("send-btn") as HTMLButtonElement;
@@ -156,6 +164,7 @@ const statusText = document.getElementById("status-text") as HTMLSpanElement;
 const contextGauge = document.getElementById("context-gauge") as HTMLSpanElement;
 const statusMeta = document.getElementById("status-meta") as HTMLSpanElement;
 const statusExtras = document.getElementById("status-extras") as HTMLSpanElement;
+
 
 // statusLine appends the active reasoning effort to the left chip in accent
 // and omits it when unset. The turn budget rides alongside it, since both
@@ -279,19 +288,117 @@ function fail(message: string) {
   saveTranscript();
 }
 
+let sidebarOpen = localStorage.getItem("zeroclaw_sidebar_open") !== "false";
+
+function updateSidebarState() {
+  sidebar.classList.toggle("closed", !sidebarOpen);
+}
+
+let cachedConversations: Record<string, string> = {};
+
+function getLocalConversationNames(): string[] {
+  const keys: string[] = [];
+  for (let i = 0; i < sessionStorage.length; i++) {
+    const k = sessionStorage.key(i);
+    if (k?.startsWith(`${TRANSCRIPT_KEY}:`)) {
+      keys.push(k.slice(`${TRANSCRIPT_KEY}:`.length));
+    }
+  }
+  return keys;
+}
+
+async function refreshConversations() {
+  try {
+    cachedConversations = await fetchConversations(authToken);
+  } catch {
+    // ignore
+  }
+  renderSidebar();
+}
+
+function renderSidebar() {
+  const entries = planConversations(cachedConversations, getLocalConversationNames(), activeConversation);
+  convList.replaceChildren();
+  entries.forEach((entry) => {
+    const item = document.createElement("div");
+    item.className = "conv-item" + (entry.isCurrent ? " active" : "");
+    item.setAttribute("role", "listitem");
+    item.tabIndex = 0;
+
+    const info = document.createElement("div");
+    info.className = "conv-item-info";
+
+    const name = document.createElement("span");
+    name.className = "conv-item-name";
+    name.textContent = entry.name;
+
+    const meta = document.createElement("span");
+    meta.className = "conv-item-meta";
+    meta.textContent = entry.meta;
+
+    info.appendChild(name);
+    info.appendChild(meta);
+    item.appendChild(info);
+
+    const actions = document.createElement("div");
+    actions.className = "conv-item-actions";
+    const delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.className = "conv-delete-btn";
+    delBtn.textContent = "✕";
+    delBtn.title = `Delete ${entry.name}`;
+    delBtn.setAttribute("aria-label", `Delete conversation ${entry.name}`);
+    delBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      void deleteConversation(entry.name);
+    });
+    actions.appendChild(delBtn);
+    item.appendChild(actions);
+
+    item.addEventListener("click", () => {
+      switchConversation(entry.name);
+    });
+    item.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        switchConversation(entry.name);
+      }
+    });
+
+    convList.appendChild(item);
+  });
+}
+
+async function deleteConversation(name: string) {
+  try {
+    await resetConversation(authToken, name);
+  } catch {
+    // ignore
+  }
+  sessionStorage.removeItem(`${TRANSCRIPT_KEY}:${name}`);
+  delete cachedConversations[name];
+  if (activeConversation === name) {
+    switchConversation("main");
+  } else {
+    renderSidebar();
+  }
+}
+
 // switchConversation swaps which zero session turns go to. The outgoing
 // transcript is saved and the incoming one restored, so each conversation
 // keeps its own visible history.
 function switchConversation(name: string) {
   const target = name.trim() || "main";
   if (target === activeConversation) {
-    convInput.value = target;
+    convLabel.textContent = target;
+    renderSidebar();
     return;
   }
   saveTranscript();
   activeConversation = target;
-  convInput.value = target;
+  convLabel.textContent = target;
   saveUIState();
+  renderSidebar();
   transcript.replaceChildren();
   if (!loadTranscript()) {
     appendBlock("welcome").textContent = `${welcomeText}\nconversation: ${target}`;
@@ -315,11 +422,8 @@ function systemMessage(text: string) {
   saveTranscript();
 }
 
-// openKeyPrompt is a password-style modal for pasting an API key, reusing the
-// picker overlay chrome. The key stays in the input's value and is never
-// rendered into the transcript. Returns the entered key, "" for an explicit
-// empty submit (which the caller may treat as "remove"), or null on cancel.
-function openKeyPrompt(provider: string, hasKey: boolean): Promise<string | null> {
+// openTextPrompt is a general modal dialog reusing picker overlay chrome.
+function openTextPrompt(title: string, placeholder: string, isPassword = false): Promise<string | null> {
   return new Promise((resolve) => {
     const overlay = document.createElement("div");
     overlay.className = "picker-overlay";
@@ -327,15 +431,15 @@ function openKeyPrompt(provider: string, hasKey: boolean): Promise<string | null
     box.className = "picker-box";
     overlay.appendChild(box);
 
-    const title = document.createElement("div");
-    title.className = "picker-title";
-    title.textContent = `API key for ${provider}`;
-    box.appendChild(title);
+    const titleEl = document.createElement("div");
+    titleEl.className = "picker-title";
+    titleEl.textContent = title;
+    box.appendChild(titleEl);
 
     const input = document.createElement("input");
-    input.type = "password";
+    input.type = isPassword ? "password" : "text";
     input.className = "picker-filter";
-    input.placeholder = hasKey ? "paste a new key, or leave empty to remove" : "paste the API key";
+    input.placeholder = placeholder;
     input.autocomplete = "off";
     input.spellcheck = false;
     box.appendChild(input);
@@ -345,9 +449,14 @@ function openKeyPrompt(provider: string, hasKey: boolean): Promise<string | null
     hint.textContent = "Enter save · Esc cancel";
     box.appendChild(hint);
 
+    const restore = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const app = document.getElementById("app");
+
     function close(value: string | null) {
       document.removeEventListener("keydown", onKeydown, true);
       overlay.remove();
+      app?.removeAttribute("inert");
+      restore?.focus();
       resolve(value);
     }
 
@@ -365,10 +474,34 @@ function openKeyPrompt(provider: string, hasKey: boolean): Promise<string | null
       if (e.target === overlay) close(null);
     });
     document.addEventListener("keydown", onKeydown, true);
+
+    app?.setAttribute("inert", "");
     document.body.appendChild(overlay);
     input.focus();
   });
 }
+
+function openKeyPrompt(provider: string, hasKey: boolean): Promise<string | null> {
+  return openTextPrompt(
+    `API key for ${provider}`,
+    hasKey ? "paste a new key, or leave empty to remove" : "paste the API key",
+    true,
+  );
+}
+
+async function chooseConversation() {
+  await refreshConversations();
+  const items = planConversationItems(cachedConversations, getLocalConversationNames(), activeConversation);
+  const picked = await openPicker("Switch conversation", items);
+  if (!picked) return;
+  if (picked.value === "__new__") {
+    const name = await openTextPrompt("New conversation", "conversation name (e.g. refactor)");
+    if (name?.trim()) switchConversation(name.trim());
+    return;
+  }
+  switchConversation(picked.value);
+}
+
 
 // setKeyForProvider stores (or, on an empty submit, removes) the API key for
 // a provider. The key is sent straight to the daemon and never rendered.
@@ -433,16 +566,7 @@ async function handleSlashCommand(text: string): Promise<boolean> {
       switchConversation(arg);
       return true;
     }
-    const existing = await fetchConversations(authToken);
-    const items = Object.entries(existing).map(([name, session]) => ({
-      group: "Conversations",
-      label: name,
-      value: name,
-      meta: name === activeConversation ? "current" : `session ${session}`,
-      provider: "",
-    }));
-    const picked = await openPicker("Switch conversation", items);
-    if (picked) switchConversation(picked.value);
+    await chooseConversation();
     return true;
   }
   // /new mirrors the reset Telegram's /new performs: the backend session
@@ -455,6 +579,8 @@ async function handleSlashCommand(text: string): Promise<boolean> {
       fail(err instanceof Error ? err.message : String(err));
       return true;
     }
+    delete cachedConversations[activeConversation];
+    renderSidebar();
     promptQueue.clear(activeConversation);
     transcript.replaceChildren();
     appendBlock("welcome").textContent = welcomeText;
@@ -463,6 +589,7 @@ async function handleSlashCommand(text: string): Promise<boolean> {
     systemMessage(`Conversation reset. ${activeConversation} starts fresh.`);
     return true;
   }
+
   // /retry resends the last prompt rather than making you retype it. Slash
   // commands were never recorded in history, so this can only pick up a
   // real prompt.
@@ -859,7 +986,11 @@ function renderTurn(thinkingEl: HTMLElement | null): {
         currentModel = next.model;
         updateModelIndicator();
         saveUIState();
-        if (ev.sessionId) setSession(ev.sessionId);
+        if (ev.sessionId) {
+          setSession(ev.sessionId);
+          cachedConversations[activeConversation] = ev.sessionId;
+          renderSidebar();
+        }
         const shownProvider = currentProvider || ev.provider;
         if (thinking) thinking.textContent = `session ${ev.sessionId} · ${shownProvider} ${ev.model}`;
         break;
@@ -1010,6 +1141,10 @@ async function sendTurn(preset?: string) {
       inFlight.signal,
     );
     turn.flush();
+    if (trailer.sessionId) {
+      cachedConversations[conversation] = trailer.sessionId;
+      renderSidebar();
+    }
     const el = appendBlock(`session ${trailer.error ? "err" : "ok"}`);
     el.textContent = `${trailer.status} · session ${trailer.sessionId}`;
     saveTranscript();
@@ -1086,15 +1221,22 @@ async function main() {
     if (intent === "ignore") return;
     void sendTurn();
   });
-  // "change", not "input": switching on every keystroke would swap
-  // transcripts mid-word. This fires on blur or Enter, once the name is
-  // actually settled. The input is reset to the active conversation first
-  // so switchConversation saves the outgoing transcript under the right key.
-  convInput.addEventListener("change", () => {
-    const target = convInput.value.trim() || "main";
-    convInput.value = activeConversation;
-    switchConversation(target);
+
+  sidebarToggle.addEventListener("click", () => {
+    sidebarOpen = !sidebarOpen;
+    localStorage.setItem("zeroclaw_sidebar_open", String(sidebarOpen));
+    updateSidebarState();
   });
+
+  newConvBtn.addEventListener("click", async () => {
+    const name = await openTextPrompt("New conversation", "conversation name (e.g. refactor)");
+    if (name?.trim()) switchConversation(name.trim());
+  });
+
+  updateSidebarState();
+  convLabel.textContent = activeConversation;
+  void refreshConversations();
+
   promptInput.addEventListener("keydown", (e) => {
     if (!palette.hidden && paletteItems.length > 0) {
       if (e.key === "ArrowDown") {

@@ -5,44 +5,58 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>zeroclaw</title>
   
-<link rel="stylesheet" crossorigin href="./chunk-bsnrq71q.css"><script type="module" crossorigin src="./chunk-sv7aznhb.js"></script></head>
+<link rel="stylesheet" crossorigin href="./chunk-3809091j.css"><script type="module" crossorigin src="./chunk-fqg68naf.js"></script></head>
 <body>
   <div id="app">
-    <!-- Mirrors internal/tui/model.go's titleBar: accent badge, faint
-         conversation, provider/model on the right. -->
+    <!-- Mirrors internal/tui/model.go's titleBar: sidebar toggle, badge,
+         faint conversation, provider/model on the right. -->
     <header id="titlebar">
+      <button id="sidebar-toggle" type="button" aria-label="Toggle sidebar" title="Toggle sidebar">☰</button>
       <span id="badge">zeroclaw</span>
-      <input id="conv-input" value="main" autocomplete="off" spellcheck="false" aria-label="conversation" />
+      <span id="conv-label">main</span>
       <span id="model-indicator"></span>
     </header>
 
-    <main id="transcript"></main>
+    <div id="workspace">
+      <aside id="sidebar" aria-label="Conversations">
+        <div id="sidebar-header">
+          <span class="sidebar-title">Conversations</span>
+          <button id="new-conv-btn" type="button" title="New conversation">+ New</button>
+        </div>
+        <div id="conv-list" role="list"></div>
+      </aside>
 
-    <!-- composerDividerLine: a quiet model-only reminder sitting in the rule
-         above the input. The provider is not repeated here; it lives in the
-         title bar. -->
-    <div id="composer-divider">
-      <span class="rule"></span>
-      <span id="composer-model"></span>
+      <div id="main-pane">
+        <main id="transcript"></main>
+
+        <!-- composerDividerLine: a quiet model-only reminder sitting in the rule
+             above the input. The provider is not repeated here; it lives in the
+             title bar. -->
+        <div id="composer-divider">
+          <span class="rule"></span>
+          <span id="composer-model"></span>
+        </div>
+
+        <form id="composer">
+          <span id="prompt-marker">❯</span>
+          <div id="prompt-wrap">
+            <textarea id="prompt-input" placeholder="Message zeroclaw…" rows="1" autofocus></textarea>
+            <span id="history-indicator" hidden></span>
+          </div>
+          <button id="send-btn" type="submit">Send</button>
+        </form>
+
+        <!-- statusLine: accent dot, ready/working, session id on the right. -->
+        <footer id="statusline">
+          <span id="status-left"><span id="status-dot">●</span> <span id="status-text">connecting</span><span id="status-extras"></span></span>
+          <span id="status-right">
+            <span id="context-gauge" hidden></span>
+            <span id="status-meta"></span>
+          </span>
+        </footer>
+      </div>
     </div>
 
-    <form id="composer">
-      <span id="prompt-marker">❯</span>
-      <div id="prompt-wrap">
-        <textarea id="prompt-input" placeholder="Message zeroclaw…" rows="1" autofocus></textarea>
-        <span id="history-indicator" hidden></span>
-      </div>
-      <button id="send-btn" type="submit">Send</button>
-    </form>
-
-    <!-- statusLine: accent dot, ready/working, session id on the right. -->
-    <footer id="statusline">
-      <span id="status-left"><span id="status-dot">●</span> <span id="status-text">connecting</span><span id="status-extras"></span></span>
-      <span id="status-right">
-        <span id="context-gauge" hidden></span>
-        <span id="status-meta"></span>
-      </span>
-    </footer>
   </div>
   
 </body>
