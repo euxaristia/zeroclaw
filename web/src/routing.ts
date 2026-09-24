@@ -48,13 +48,16 @@ export function applyRunStart(current: RouteState, ev: RouteState): RouteState {
 export type ConversationEntry = {
   name: string;
   sessionId?: string;
+  title?: string;
   isCurrent: boolean;
   meta: string;
 };
 
+export type ConversationMapValue = string | { sessionId?: string; title?: string };
+
 // planConversations builds the structured list for the conversation sidebar and picker.
 export function planConversations(
-  existing: Record<string, string> = {},
+  existing: Record<string, ConversationMapValue> = {},
   localNames: string[] = [],
   active = "main",
 ): ConversationEntry[] {
@@ -73,7 +76,9 @@ export function planConversations(
   });
 
   return sorted.map((name) => {
-    const sessionId = existing[name];
+    const val = existing[name];
+    const sessionId = typeof val === "string" ? val : val?.sessionId;
+    const title = typeof val === "string" ? undefined : val?.title;
     const isCurrent = name === active;
     const meta = isCurrent
       ? sessionId
@@ -82,7 +87,7 @@ export function planConversations(
       : sessionId
         ? `session ${sessionId}`
         : "local";
-    return { name, sessionId, isCurrent, meta };
+    return { name, sessionId, title, isCurrent, meta };
   });
 }
 
@@ -97,7 +102,7 @@ export function planNextConversation(names: string[], deleted: string) {
 
 // planConversationItems builds catalog items for the /conversation picker.
 export function planConversationItems(
-  existing: Record<string, string> = {},
+  existing: Record<string, ConversationMapValue> = {},
   localNames: string[] = [],
   active = "main",
 ): CatalogItem[] {
@@ -115,7 +120,7 @@ export function planConversationItems(
   convs.forEach((c) => {
     items.push({
       group: "Conversations",
-      label: c.name,
+      label: c.title && c.title !== c.name ? `${c.name}: ${c.title}` : c.name,
       value: c.name,
       meta: c.meta,
       provider: "",

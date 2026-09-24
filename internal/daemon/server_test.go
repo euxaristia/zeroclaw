@@ -29,6 +29,14 @@ func (d stubDriver) Defaults(context.Context, string) (agent.Defaults, error) {
 	return d.defaults, d.defaultsErr
 }
 
+func (stubDriver) History(context.Context, string, string) ([]agent.HistoryEntry, error) {
+	return nil, nil
+}
+
+func (stubDriver) Titles(context.Context, string, []string) (map[string]string, error) {
+	return map[string]string{}, nil
+}
+
 // capturingDriver records the options it was handed so a test can assert
 // what the daemon forwarded.
 type capturingDriver struct {
@@ -231,6 +239,39 @@ func TestHandleDeleteConversationRequiresName(t *testing.T) {
 	}
 }
 
+func TestHandleHistoryNoSession(t *testing.T) {
+	s := newTestServer()
+	s.sessions = mustSessionStore(t)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/history/main", nil)
+	req.SetPathValue("conversation", "main")
+	s.handleHistory(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	var entries []agent.HistoryEntry
+	if err := json.Unmarshal(rec.Body.Bytes(), &entries); err != nil {
+		t.Fatalf("body not json: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("got %d entries, want 0 for unmapped conversation", len(entries))
+	}
+}
+
+func TestHandleHistoryRequiresConversation(t *testing.T) {
+	s := newTestServer()
+	s.sessions = mustSessionStore(t)
+
+	rec := httptest.NewRecorder()
+	s.handleHistory(rec, httptest.NewRequest(http.MethodGet, "/history/", nil))
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("history without conversation = %d, want 400", rec.Code)
+	}
+}
+
 // The turn options a browser can set are validated at the boundary so a bad
 // value fails here with a clear message instead of deep inside the container.
 func TestHandleTurnRejectsBadOptions(t *testing.T) {
@@ -286,12 +327,12 @@ func TestHandleConversations(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status code = %d, want 200", rec.Code)
 	}
-	var body map[string]any
+	var body map[string]ConversationSummary
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("body not json: %v", err)
 	}
-	if body["main"] != "sess-1" {
-		t.Errorf("conversations = %v, want {main: sess-1}", body)
+	if body["main"].SessionID != "sess-1" {
+		t.Errorf("conversations = %v, want main.sessionId = sess-1", body)
 	}
 }
 

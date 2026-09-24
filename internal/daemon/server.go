@@ -178,6 +178,7 @@ func RunServer(agentNameOpt ...string) error {
 	mux.Handle("DELETE /credentials/{provider}", s.auth(http.HandlerFunc(s.handleDeleteCredential)))
 	mux.Handle("POST /turn", s.auth(http.HandlerFunc(s.handleTurn)))
 	mux.Handle("DELETE /conversations/{name}", s.auth(http.HandlerFunc(s.handleDeleteConversation)))
+	mux.Handle("GET /history/{conversation}", s.auth(http.HandlerFunc(s.handleHistory)))
 	mux.Handle("POST /beat", s.auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		go s.runScheduled(schedCtx, "heartbeat", heartbeatPrompt)
 		w.WriteHeader(http.StatusAccepted)
@@ -310,8 +311,35 @@ func (s *server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(body)
 }
 
+// ConversationSummary describes a conversation's active session and title.
+type ConversationSummary struct {
+	SessionID string `json:"sessionId"`
+	Title     string `json:"title,omitempty"`
+}
+
 func (s *server) handleConversations(w http.ResponseWriter, r *http.Request) {
-	_ = json.NewEncoder(w).Encode(s.sessions.All())
+	all := s.sessions.All()
+	sessionIDs := make([]string, 0, len(all))
+	for _, id := range all {
+		if id != "" {
+			sessionIDs = append(sessionIDs, id)
+		}
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	titles, _ := s.driver.Titles(ctx, s.container, sessionIDs)
+	resp := make(map[string]ConversationSummary, len(all))
+	for name, id := range all {
+		var title string
+		if titles != nil {
+			title = titles[id]
+		}
+		resp[name] = ConversationSummary{
+			SessionID: id,
+			Title:     title,
+		}
+	}
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 // handleDeleteConversation drops a conversation's session mapping so the
@@ -334,6 +362,35 @@ func (s *server) handleDeleteConversation(w http.ResponseWriter, r *http.Request
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleHistory returns the persisted session events for a conversation,
+// projected into the minimal shape the web UI needs to reconstruct a
+// transcript. The response is a JSON array of HistoryEntry values. An
+// empty array means no history exists (unknown conversation or missing
+// session file).
+func (s *server) handleHistory(w http.ResponseWriter, r *http.Request) {
+	conversation := r.PathValue("conversation")
+	if conversation == "" {
+		http.Error(w, "conversation name required", http.StatusBadRequest)
+		return
+	}
+	sessionID := s.sessions.Get(conversation)
+	if sessionID == "" {
+		_ = json.NewEncoder(w).Encode([]agent.HistoryEntry{})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	entries, err := s.driver.History(ctx, s.container, sessionID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if entries == nil {
+		entries = []agent.HistoryEntry{}
+	}
+	_ = json.NewEncoder(w).Encode(entries)
 }
 
 func (s *server) handleProviders(w http.ResponseWriter, r *http.Request) {

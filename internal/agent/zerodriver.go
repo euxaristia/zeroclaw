@@ -252,3 +252,128 @@ func (ZeroDriver) Turn(ctx context.Context, opts TurnOptions, onEvent func(Event
 	}
 	return res, nil
 }
+
+// sessionsDir is the path inside the container where zero persists session
+// event logs.
+const sessionsDir = env.Home + "/.local/share/zero/sessions"
+
+// validateSessionID rejects values that could escape the sessions directory.
+func validateSessionID(id string) error {
+	if id == "" {
+		return fmt.Errorf("empty session id")
+	}
+	if strings.ContainsAny(id, "/\\") || strings.Contains(id, "..") {
+		return fmt.Errorf("invalid session id")
+	}
+	return nil
+}
+
+// sessionEvent is the on-disk schema zero writes to events.jsonl.
+type sessionEvent struct {
+	Type    string          `json:"type"`
+	Payload json.RawMessage `json:"payload"`
+}
+
+// parseSessionEvents projects raw events.jsonl content into HistoryEntry
+// values. Only user/assistant messages, tool calls, and errors are kept;
+// provider_usage and other bookkeeping events are skipped.
+func parseSessionEvents(data []byte) []HistoryEntry {
+	var entries []HistoryEntry
+	sc := bufio.NewScanner(bytes.NewReader(data))
+	sc.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
+	for sc.Scan() {
+		line := bytes.TrimSpace(sc.Bytes())
+		if len(line) == 0 {
+			continue
+		}
+		var raw sessionEvent
+		if json.Unmarshal(line, &raw) != nil {
+			continue
+		}
+		switch raw.Type {
+		case "message":
+			var p struct {
+				Content string `json:"content"`
+				Role    string `json:"role"`
+			}
+			if json.Unmarshal(raw.Payload, &p) != nil {
+				continue
+			}
+			entries = append(entries, HistoryEntry{Role: p.Role, Content: p.Content})
+		case "tool_call":
+			var p struct {
+				Name string `json:"name"`
+			}
+			if json.Unmarshal(raw.Payload, &p) != nil {
+				continue
+			}
+			entries = append(entries, HistoryEntry{Role: "tool_call", Name: p.Name})
+		case "error":
+			var p struct {
+				Message string `json:"message"`
+			}
+			if json.Unmarshal(raw.Payload, &p) != nil {
+				continue
+			}
+			entries = append(entries, HistoryEntry{Role: "error", Content: p.Message})
+		}
+	}
+	return entries
+}
+
+func (ZeroDriver) History(ctx context.Context, container, sessionID string) ([]HistoryEntry, error) {
+	if container == "" {
+		container = env.Container
+	}
+	if err := validateSessionID(sessionID); err != nil {
+		return nil, err
+	}
+	path := sessionsDir + "/" + sessionID + "/events.jsonl"
+	cmd := env.DockerCommandContext(ctx, "exec", container, "cat", path)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, nil
+	}
+	return parseSessionEvents(out), nil
+}
+
+func (ZeroDriver) Titles(ctx context.Context, container string, sessionIDs []string) (map[string]string, error) {
+	if container == "" {
+		container = env.Container
+	}
+	titles := make(map[string]string, len(sessionIDs))
+	if len(sessionIDs) == 0 {
+		return titles, nil
+	}
+	cmd := env.DockerCommandContext(ctx, "exec", container, "zero", "sessions", "list", "--json")
+	out, err := cmd.Output()
+	if err == nil {
+		var list []struct {
+			SessionID string `json:"sessionId"`
+			Title     string `json:"title"`
+		}
+		if json.Unmarshal(out, &list) == nil {
+			for _, item := range list {
+				if item.Title != "" {
+					titles[item.SessionID] = item.Title
+				}
+			}
+		}
+	}
+	for _, id := range sessionIDs {
+		if titles[id] != "" || validateSessionID(id) != nil {
+			continue
+		}
+		path := sessionsDir + "/" + id + "/metadata.json"
+		mCmd := env.DockerCommandContext(ctx, "exec", container, "cat", path)
+		if mOut, mErr := mCmd.Output(); mErr == nil {
+			var meta struct {
+				Title string `json:"title"`
+			}
+			if json.Unmarshal(mOut, &meta) == nil && meta.Title != "" {
+				titles[id] = meta.Title
+			}
+		}
+	}
+	return titles, nil
+}

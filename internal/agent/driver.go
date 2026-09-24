@@ -78,6 +78,15 @@ type TurnResult struct {
 	ExitCode  int
 }
 
+// HistoryEntry is a single line in a conversation's persisted history,
+// projected from the backend's session log into the minimal shape the web
+// UI needs to reconstruct a transcript after a tab close.
+type HistoryEntry struct {
+	Role    string `json:"role"` // user, assistant, tool_call, error
+	Content string `json:"content,omitempty"`
+	Name    string `json:"name,omitempty"` // tool name for tool_call entries
+}
+
 // Defaults is what the backend will use for a turn that requests no
 // provider or model override. Zeroclaw itself holds no default: an empty
 // TurnOptions.Provider/Model leaves the choice to the backend's own
@@ -97,6 +106,13 @@ type Driver interface {
 	// Defaults reports the backend's active provider and model. Callers
 	// treat an error as "unknown" rather than fatal; it is display sugar.
 	Defaults(ctx context.Context, container string) (Defaults, error)
+	// History reads persisted session events and projects them into
+	// HistoryEntry values the web UI can render as a transcript.
+	// A nil slice with no error means the session was not found.
+	History(ctx context.Context, container, sessionID string) ([]HistoryEntry, error)
+	// Titles reads auto-derived session titles from backend metadata for
+	// the given session IDs.
+	Titles(ctx context.Context, container string, sessionIDs []string) (map[string]string, error)
 }
 
 // NewDriver constructs the execution driver for the requested backend.

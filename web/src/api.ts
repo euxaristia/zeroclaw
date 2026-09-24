@@ -87,11 +87,26 @@ export async function fetchStatus(token: string): Promise<StatusResponse> {
   return resp.json();
 }
 
-// Maps conversation name to the zero session id backing it.
-export async function fetchConversations(token: string): Promise<Record<string, string>> {
+export interface ConversationInfo {
+  sessionId: string;
+  title?: string;
+}
+
+// Maps conversation name to its session ID and auto-derived title.
+export async function fetchConversations(token: string): Promise<Record<string, ConversationInfo>> {
   const resp = await fetch("/conversations", { headers: authHeaders(token) });
   if (!resp.ok) throw new Error(`conversations request failed: ${resp.status}`);
-  return resp.json();
+  const raw = (await resp.json()) as Record<string, unknown>;
+  const out: Record<string, ConversationInfo> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (typeof v === "string") {
+      out[k] = { sessionId: v };
+    } else if (v && typeof v === "object") {
+      const obj = v as { sessionId?: string; title?: string };
+      out[k] = { sessionId: obj.sessionId ?? "", title: obj.title || undefined };
+    }
+  }
+  return out;
 }
 
 // Drops the conversation's session mapping so the next turn starts fresh.
@@ -101,6 +116,25 @@ export async function resetConversation(token: string, conversation: string): Pr
     headers: authHeaders(token),
   });
   if (!resp.ok) throw new Error(`reset failed: ${resp.status}`);
+}
+
+// Projected session event from the backend, used to reconstruct a
+// transcript after a tab close (sessionStorage lost).
+export interface HistoryEntry {
+  role: string; // user, assistant, tool_call, error
+  content?: string;
+  name?: string; // tool name for tool_call entries
+}
+
+export async function fetchHistory(
+  token: string,
+  conversation: string,
+): Promise<HistoryEntry[]> {
+  const resp = await fetch(`/history/${encodeURIComponent(conversation)}`, {
+    headers: authHeaders(token),
+  });
+  if (!resp.ok) throw new Error(`history request failed: ${resp.status}`);
+  return resp.json();
 }
 
 export async function fireHeartbeat(token: string): Promise<void> {

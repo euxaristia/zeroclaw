@@ -4,6 +4,7 @@ import {
   fetchProviders,
   fetchModels,
   fetchConversations,
+  fetchHistory,
   fetchCredentials,
   setCredential,
   deleteCredential,
@@ -12,6 +13,7 @@ import {
   streamTurn,
   type AgentEvent,
   type CatalogItem,
+  type ConversationInfo,
 } from "./api";
 import { openPicker } from "./picker";
 import { renderMarkdown } from "./markdown";
@@ -106,6 +108,48 @@ function loadTranscript(): boolean {
   }
   transcript.scrollTop = transcript.scrollHeight;
   return true;
+}
+
+// loadHistoryFromBackend fetches persisted session events from the daemon
+// and renders them into transcript blocks, recovering the conversation
+// after a tab close (when sessionStorage is empty but the backend session
+// is intact).
+async function loadHistoryFromBackend(): Promise<boolean> {
+  try {
+    const entries = await fetchHistory(authToken, activeConversation);
+    if (entries.length === 0) return false;
+    for (const entry of entries) {
+      switch (entry.role) {
+        case "user": {
+          const el = appendBlock("user");
+          el.textContent = entry.content ?? "";
+          break;
+        }
+        case "assistant": {
+          const el = appendBlock("reply");
+          el.replaceChildren(renderMarkdown(entry.content ?? ""));
+          break;
+        }
+        case "tool_call": {
+          const el = appendBlock("tool");
+          const nameSpan = document.createElement("span");
+          nameSpan.className = "name";
+          nameSpan.textContent = `⏺ ${entry.name}`;
+          el.appendChild(nameSpan);
+          break;
+        }
+        case "error": {
+          const el = appendBlock("error");
+          el.textContent = entry.content ?? "";
+          break;
+        }
+      }
+    }
+    saveTranscript();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function saveUIState() {
@@ -295,7 +339,7 @@ function updateSidebarState() {
   sidebar.classList.toggle("closed", !sidebarOpen);
 }
 
-let cachedConversations: Record<string, string> = {};
+let cachedConversations: Record<string, ConversationInfo> = {};
 
 function getLocalConversationNames(): string[] {
   const keys: string[] = [];
@@ -331,11 +375,15 @@ function renderSidebar() {
 
     const name = document.createElement("span");
     name.className = "conv-item-name";
-    name.textContent = entry.name;
+    name.textContent = entry.title || entry.name;
+    if (entry.title && entry.title !== entry.name) {
+      name.title = `${entry.name}: ${entry.title}`;
+    }
 
     const meta = document.createElement("span");
     meta.className = "conv-item-meta";
-    meta.textContent = entry.meta;
+    const labelPrefix = entry.title && entry.title !== entry.name ? `${entry.name} · ` : "";
+    meta.textContent = `${labelPrefix}${entry.meta}`;
 
     info.appendChild(name);
     info.appendChild(meta);
@@ -391,7 +439,7 @@ async function deleteConversation(name: string) {
 // switchConversation swaps which zero session turns go to. The outgoing
 // transcript is saved and the incoming one restored, so each conversation
 // keeps its own visible history.
-function switchConversation(name: string, saveCurrent = true) {
+async function switchConversation(name: string, saveCurrent = true) {
   const target = name.trim() || "main";
   if (target === activeConversation) {
     convLabel.textContent = target;
@@ -404,7 +452,7 @@ function switchConversation(name: string, saveCurrent = true) {
   saveUIState();
   renderSidebar();
   transcript.replaceChildren();
-  if (!loadTranscript()) {
+  if (!loadTranscript() && !(await loadHistoryFromBackend())) {
     appendBlock("welcome").textContent = `${welcomeText}\nconversation: ${target}`;
     saveTranscript();
   }
@@ -992,7 +1040,8 @@ function renderTurn(thinkingEl: HTMLElement | null): {
         saveUIState();
         if (ev.sessionId) {
           setSession(ev.sessionId);
-          cachedConversations[activeConversation] = ev.sessionId;
+          const prev = cachedConversations[activeConversation];
+          cachedConversations[activeConversation] = { sessionId: ev.sessionId, title: prev?.title };
           renderSidebar();
         }
         const shownProvider = currentProvider || ev.provider;
@@ -1146,8 +1195,10 @@ async function sendTurn(preset?: string) {
     );
     turn.flush();
     if (trailer.sessionId) {
-      cachedConversations[conversation] = trailer.sessionId;
+      const prev = cachedConversations[conversation];
+      cachedConversations[conversation] = { sessionId: trailer.sessionId, title: prev?.title };
       renderSidebar();
+      void refreshConversations();
     }
     const el = appendBlock(`session ${trailer.error ? "err" : "ok"}`);
     el.textContent = `${trailer.status} · session ${trailer.sessionId}`;
@@ -1210,7 +1261,7 @@ async function main() {
     fail(err instanceof Error ? err.message : String(err));
     return;
   }
-  if (!loadTranscript()) {
+  if (!loadTranscript() && !(await loadHistoryFromBackend())) {
     appendBlock("welcome").textContent = welcomeText;
     saveTranscript();
   }

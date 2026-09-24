@@ -82,3 +82,33 @@ test("planNextConversation falls back to main when unknown or only item", () => 
   expect(planNextConversation([], "anything")).toBe("main");
 });
 
+test("planConversations includes titles when present", () => {
+  const convs = planConversations(
+    {
+      main: { sessionId: "sess-1", title: "u there zero?" },
+      previous: { sessionId: "sess-2", title: "My favorite number is 42" },
+    },
+    [],
+    "previous",
+  );
+  const prev = convs.find((c) => c.name === "previous");
+  expect(prev?.title).toBe("My favorite number is 42");
+  expect(prev?.isCurrent).toBe(true);
+  const main = convs.find((c) => c.name === "main");
+  expect(main?.title).toBe("u there zero?");
+  expect(main?.isCurrent).toBe(false);
+});
+
+test("planConversationItems labels with titles when present", () => {
+  const items = planConversationItems(
+    {
+      main: { sessionId: "sess-1", title: "u there zero?" },
+    },
+    [],
+    "main",
+  );
+  const mainItem = items.find((i) => i.value === "main");
+  expect(mainItem?.label).toBe("main: u there zero?");
+});
+
+

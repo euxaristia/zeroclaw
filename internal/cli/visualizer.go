@@ -140,7 +140,7 @@ func RunVisualizer(w io.Writer, watch bool) error {
 	return nil
 }
 
-func getConversations(info daemon.Info) (map[string]string, error) {
+func getConversations(info daemon.Info) (map[string]any, error) {
 	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/conversations", info.Port), nil)
 	if err != nil {
 		return nil, err
@@ -152,7 +152,7 @@ func getConversations(info daemon.Info) (map[string]string, error) {
 	}
 	defer resp.Body.Close()
 
-	var convs map[string]string
+	var convs map[string]any
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&convs); err != nil {
 		return nil, err
 	}
