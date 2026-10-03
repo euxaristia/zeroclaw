@@ -52,3 +52,8 @@
 **Vulnerability:** HTTP clients in `internal/channels/telegram.go` and `internal/cli/visualizer.go` used `io.ReadAll(resp.Body)` or `json.NewDecoder(resp.Body)` to consume third-party API responses without a size limit. An attacker or a misbehaving server could return an infinitely large payload, causing the Go application to allocate unbounded memory, leading to an Out of Memory (OOM) crash and Denial of Service (DoS).
 **Learning:** Even when reading from "trusted" external APIs like Telegram, never trust that the response size is reasonable. A compromised upstream or a network error could send a massive payload.
 **Prevention:** Always bound the maximum size of data read from an external source into memory. Wrap `resp.Body` with `io.LimitReader` (e.g., `io.LimitReader(resp.Body, 4<<20)` for a 4MB limit) before calling `io.ReadAll` or passing it to `json.NewDecoder`.
+
+## 2026-08-27 - Information Disclosure via HTTP Error Leakage
+**Vulnerability:** The HTTP handlers in `internal/daemon/server.go` passed internal error messages (`err.Error()`) directly to `http.Error` for HTTP 500 status codes. This practice inadvertently leaks sensitive implementation details (like system paths, stack traces, or upstream error messages) to end users or attackers in the response body.
+**Learning:** Returning un-sanitized internal errors in a production web server is a common source of information leakage (CWE-209), which attackers can use to gather reconnaissance on the application structure.
+**Prevention:** Always log detailed error messages internally (e.g., using `log.Printf` or structured logging) for debugging purposes, but return generic error messages to the client via `http.Error` (e.g., "internal server error").
