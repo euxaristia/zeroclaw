@@ -358,7 +358,8 @@ func (s *server) handleDeleteConversation(w http.ResponseWriter, r *http.Request
 	lock.Lock()
 	defer lock.Unlock()
 	if err := s.DeleteConversation(name); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("internal error: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -384,7 +385,8 @@ func (s *server) handleHistory(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	entries, err := s.driver.History(ctx, s.container, sessionID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("internal error: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 	if entries == nil {
@@ -419,7 +421,8 @@ func (s *server) handleModels(w http.ResponseWriter, r *http.Request) {
 func (s *server) handleCredentials(w http.ResponseWriter, r *http.Request) {
 	names, err := env.StoredAPIKeyProviders(s.agentName)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("internal error: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{"providers": names})
@@ -447,7 +450,8 @@ func (s *server) handleSetCredential(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := env.SetAPIKey(provider, req.APIKey, s.agentName); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("internal error: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -462,7 +466,8 @@ func (s *server) handleDeleteCredential(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := env.DeleteAPIKey(provider, s.agentName); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("internal error: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
