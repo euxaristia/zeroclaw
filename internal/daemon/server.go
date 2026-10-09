@@ -524,11 +524,13 @@ func (s *server) handleTurn(w http.ResponseWriter, r *http.Request) {
 	res, err := s.driver.Turn(r.Context(), opts, func(ev agent.Event) { emit(ev) })
 	trailer := Trailer{Type: "zeroclaw_result", SessionID: res.SessionID, Status: res.Status, Final: res.Final}
 	if err != nil {
-		trailer.Error = err.Error()
+		log.Printf("internal error during turn: %v", err)
+		trailer.Error = "internal server error"
 	}
 	if res.SessionID != "" && opts.SessionID == "" {
 		if serr := s.sessions.Set(req.Conversation, res.SessionID); serr != nil && trailer.Error == "" {
-			trailer.Error = "conversation not persisted: " + serr.Error()
+			log.Printf("internal error saving session: %v", serr)
+			trailer.Error = "internal server error"
 		}
 	}
 	emit(trailer)

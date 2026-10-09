@@ -57,3 +57,7 @@
 **Vulnerability:** The HTTP handlers in `internal/daemon/server.go` passed internal error messages (`err.Error()`) directly to `http.Error` for HTTP 500 status codes. This practice inadvertently leaks sensitive implementation details (like system paths, stack traces, or upstream error messages) to end users or attackers in the response body.
 **Learning:** Returning un-sanitized internal errors in a production web server is a common source of information leakage (CWE-209), which attackers can use to gather reconnaissance on the application structure.
 **Prevention:** Always log detailed error messages internally (e.g., using `log.Printf` or structured logging) for debugging purposes, but return generic error messages to the client via `http.Error` (e.g., "internal server error").
+## 2026-08-05 - Avoid Leaking Error Details to Clients
+**Vulnerability:** The HTTP handlers passed internal error messages (`err.Error()`) directly to the client JSON payload in the server handler (`internal/daemon/server.go`). This practice inadvertently leaks sensitive implementation details (like system paths, stack traces, or upstream error messages) to end users or attackers in the response stream.
+**Learning:** Detailed error messages are critical for internal debugging but pose a security risk when exposed to clients.
+**Prevention:** Always log detailed error messages internally (e.g., using `log.Printf` or structured logging) for debugging purposes, but return generic error messages to the client (e.g., "internal server error") when returning JSON event streams.
