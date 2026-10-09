@@ -61,3 +61,7 @@
 **Vulnerability:** The HTTP handlers passed internal error messages (`err.Error()`) directly to the client JSON payload in the server handler (`internal/daemon/server.go`). This practice inadvertently leaks sensitive implementation details (like system paths, stack traces, or upstream error messages) to end users or attackers in the response stream.
 **Learning:** Detailed error messages are critical for internal debugging but pose a security risk when exposed to clients.
 **Prevention:** Always log detailed error messages internally (e.g., using `log.Printf` or structured logging) for debugging purposes, but return generic error messages to the client (e.g., "internal server error") when returning JSON event streams.
+## 2026-10-09 - Go Standard Library Vulnerability CI Failure
+**Vulnerability:** The project failed the `govulncheck` CI check due to the use of Go standard library version `go1.26.6` which contained known vulnerabilities (e.g., GO-2026-6611, GO-2026-6610).
+**Learning:** Hardcoding a lower `toolchain` version in `go.mod` to establish a floor can unintentionally enforce a vulnerable version. The CI pipeline will correctly block the build if vulnerabilities are present.
+**Prevention:** Regularly update the `toolchain` directive in `go.mod` to track patched versions of the Go standard library, mitigating vulnerabilities identified by `govulncheck`.
